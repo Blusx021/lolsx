@@ -187,6 +187,24 @@ local function ClampOffsetPosition(position, size, padding)
     )
 end
 
+local function ClampWindowPosition(position, size, visibleMarginX, visibleMarginY)
+    visibleMarginX = visibleMarginX or 72
+    visibleMarginY = visibleMarginY or 36
+
+    local viewport = GetViewportSize()
+    local minX = visibleMarginX - size.X
+    local maxX = viewport.X - visibleMarginX
+    local minY = visibleMarginY - size.Y
+    local maxY = viewport.Y - visibleMarginY
+
+    return UDim2.new(
+        0,
+        math.clamp(position.X.Offset, minX, maxX),
+        0,
+        math.clamp(position.Y.Offset, minY, maxY)
+    )
+end
+
 local function GetClampedGuiPosition(guiObject, fallbackPosition)
     local position = fallbackPosition or guiObject.Position
     local size = guiObject.AbsoluteSize
@@ -207,7 +225,18 @@ local function ConnectPress(button, callback)
     local touchStartPosition = nil
     local touchMoved = false
     local lastTouchPress = 0
+    local lastAnyPress = 0
     local dragThreshold = 8
+    local pressCooldown = 0.2
+
+    local function FirePress()
+        local now = tick()
+        if now - lastAnyPress < pressCooldown then
+            return
+        end
+        lastAnyPress = now
+        callback()
+    end
 
     AddConnection(button.InputBegan, function(input)
         if IsTouchInput(input) then
@@ -235,7 +264,7 @@ local function ConnectPress(button, callback)
             touchMoved = false
             lastTouchPress = tick()
             if shouldTrigger then
-                callback()
+                FirePress()
             end
         end
     end)
@@ -244,7 +273,7 @@ local function ConnectPress(button, callback)
         if tick() - lastTouchPress < 0.25 then
             return
         end
-        callback()
+        FirePress()
     end)
 end
 
@@ -349,7 +378,7 @@ function MakeDraggable(DragPoint, Main)
                 local Delta = Input.Position - PointerPos
                 if Delta.Magnitude < dragThreshold then return end
 
-                Main.Position = ClampOffsetPosition(UDim2.new(
+                Main.Position = ClampWindowPosition(UDim2.new(
                     0,
                     FramePos.X.Offset + Delta.X,
                     0,
@@ -500,10 +529,7 @@ function LoadCfg(Config)
     end
 
     for a, b in pairs(Data) do
-        if a == "__orion_theme" then
-            continue
-        end
-        if OrionLib.Flags[a] then
+        if a ~= "__orion_theme" and OrionLib.Flags[a] then
             task.spawn(function()
                 if OrionLib.Flags[a].Type == "Colorpicker" then
                     OrionLib.Flags[a]:Set(UnpackColor(b))
@@ -908,12 +934,12 @@ function OrionLib:MakeWindow(WindowConfig)
                             prop = ReturnProperty(obj)
                             if prop then
                                 cch[obj] = prop
-                            else
-                                continue
                             end
                         end
-                        count = count + 1
-                        updates[count] = {obj, prop, color}
+                        if prop then
+                            count = count + 1
+                            updates[count] = {obj, prop, color}
+                        end
                     end
                 end
             end
@@ -1999,6 +2025,7 @@ function OrionLib:MakeWindow(WindowConfig)
 
 	local reztween = nil
 	local mintween = nil
+	local minimizeBusy = false
 
 	local function gnw()
 		local plain = WindowName.ContentText ~= "" and WindowName.ContentText or WindowName.Text
@@ -2019,6 +2046,10 @@ function OrionLib:MakeWindow(WindowConfig)
 	AddConnection(WindowName:GetPropertyChangedSignal("TextBounds"), updminframe)
 
 	ConnectPress(MinimizeBtn, function()
+		if minimizeBusy then
+			return
+		end
+		minimizeBusy = true
 		if reztween then reztween:Cancel(); reztween = nil end
 		if mintween then mintween:Cancel(); mintween = nil end
 		minimized = not minimized
@@ -2038,6 +2069,7 @@ function OrionLib:MakeWindow(WindowConfig)
 				Size = UDim2.new(0, winW, 0, 36)
 			})
 			mintween:Play(); mintween.Completed:Wait()
+			minimizeBusy = false
 		else
 			MinimizeBtn.Ico.Image = "rbxassetid://7072719338"
 			WindowName.TextTruncate = Enum.TextTruncate.AtEnd
@@ -2054,6 +2086,7 @@ function OrionLib:MakeWindow(WindowConfig)
 				MainWindow.TabStrip.Visible = true
 			end)
 			mintween.Completed:Wait()
+			minimizeBusy = false
 		end
 	end)
 
@@ -3680,14 +3713,15 @@ function OrionLib:MakeWindow(WindowConfig)
 						if AddMode ~= nil then
 							local values = type(Value) == "table" and Value or {Value}
 							for _, v in pairs(values) do
-								if not table.find(self.Options, v) then continue end
-								local index = table.find(self.Value, v)
-								if AddMode and not index then
-									table.insert(self.Value, v)
-									changed = true
-								elseif not AddMode and index then
-									table.remove(self.Value, index)
-									changed = true
+								if table.find(self.Options, v) then
+									local index = table.find(self.Value, v)
+									if AddMode and not index then
+										table.insert(self.Value, v)
+										changed = true
+									elseif not AddMode and index then
+										table.remove(self.Value, index)
+										changed = true
+									end
 								end
 							end
 						else
