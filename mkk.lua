@@ -188,8 +188,8 @@ local function ClampOffsetPosition(position, size, padding)
 end
 
 local function ClampWindowPosition(position, size, visibleMarginX, visibleMarginY)
-    visibleMarginX = visibleMarginX or 72
-    visibleMarginY = visibleMarginY or 36
+    visibleMarginX = visibleMarginX or 32
+    visibleMarginY = visibleMarginY or 20
 
     local viewport = GetViewportSize()
     local minX = visibleMarginX - size.X
@@ -226,7 +226,7 @@ local function ConnectPress(button, callback)
     local touchMoved = false
     local lastTouchPress = 0
     local lastAnyPress = 0
-    local dragThreshold = 8
+    local dragThreshold = 18
     local pressCooldown = 0.2
 
     local function FirePress()
@@ -1997,7 +1997,7 @@ function OrionLib:MakeWindow(WindowConfig)
 	end
 
 	local function ShowWindow()
-		MainWindow.Position = GetClampedGuiPosition(MainWindow, MainWindow.Position)
+		MainWindow.Position = ClampWindowPosition(MainWindow.Position, MainWindow.AbsoluteSize)
 		MainWindow.Visible = true
 		UIHidden = false
 		ReopenBtn.Visible = false
