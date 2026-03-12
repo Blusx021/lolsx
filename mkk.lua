@@ -259,13 +259,13 @@ function MakeDraggable(DragPoint, Main)
             if IsPrimaryPointerInput(Input) then
                 Dragging  = true
                 DragInput = Input
-                PointerPos = Input.Position
-                FramePos = Main.Position
+                PointerPos  = Input.Position
+                FramePos  = Main.Position
             end
         end)
 
         AddConnection(vgs.UIS.InputEnded, function(Input)
-            if DragInput and (Input == DragInput or (IsMouseInput(DragInput) and IsMouseInput(Input))) then
+            if DragInput == Input or IsPrimaryPointerInput(Input) then
                 Dragging = false
                 DragInput = nil
             end
@@ -278,7 +278,7 @@ function MakeDraggable(DragPoint, Main)
         end)
 
         AddConnection(vgs.UIS.InputChanged, function(Input)
-            if Dragging and IsPointerMoveInput(Input) and IsMatchingDragInput(DragInput, Input) then
+            if Input == DragInput and Dragging then
                 local Delta = Input.Position - PointerPos
                 vgs.TS:Create(Main, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                     Position = UDim2.new(
@@ -433,7 +433,10 @@ function LoadCfg(Config)
     end
 
     for a, b in pairs(Data) do
-        if a ~= "__orion_theme" and OrionLib.Flags[a] then
+        if a == "__orion_theme" then
+            continue
+        end
+        if OrionLib.Flags[a] then
             task.spawn(function()
                 if OrionLib.Flags[a].Type == "Colorpicker" then
                     OrionLib.Flags[a]:Set(UnpackColor(b))
@@ -838,12 +841,12 @@ function OrionLib:MakeWindow(WindowConfig)
                             prop = ReturnProperty(obj)
                             if prop then
                                 cch[obj] = prop
+                            else
+                                continue
                             end
                         end
-                        if prop then
-                            count = count + 1
-                            updates[count] = {obj, prop, color}
-                        end
+                        count = count + 1
+                        updates[count] = {obj, prop, color}
                     end
                 end
             end
@@ -1584,9 +1587,7 @@ function OrionLib:MakeWindow(WindowConfig)
             local timediff = cctime2 - lctime
 
             if timediff <= dctime and minimized then
-                if IsMouseInput(input) and mouse1release then
-                    mouse1release()
-                end
+                mouse1release()
                 local screenSize = workspace.CurrentCamera.ViewportSize
                 local windowSize = MainWindow.AbsoluteSize
                 local xPos       = (screenSize.X - windowSize.X) / 2
@@ -3593,15 +3594,14 @@ function OrionLib:MakeWindow(WindowConfig)
 						if AddMode ~= nil then
 							local values = type(Value) == "table" and Value or {Value}
 							for _, v in pairs(values) do
-								if table.find(self.Options, v) then
-									local index = table.find(self.Value, v)
-									if AddMode and not index then
-										table.insert(self.Value, v)
-										changed = true
-									elseif not AddMode and index then
-										table.remove(self.Value, index)
-										changed = true
-									end
+								if not table.find(self.Options, v) then continue end
+								local index = table.find(self.Value, v)
+								if AddMode and not index then
+									table.insert(self.Value, v)
+									changed = true
+								elseif not AddMode and index then
+									table.remove(self.Value, index)
+									changed = true
 								end
 							end
 						else
