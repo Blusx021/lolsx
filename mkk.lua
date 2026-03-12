@@ -129,81 +129,127 @@ function AddConnection(Signal, Function)
     end
 end
 
-local function IsPrimaryPress(input)
-    return input and (
-        input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch
+local PRIMARY_POINTER_TYPES = {
+    [Enum.UserInputType.MouseButton1] = true,
+    [Enum.UserInputType.Touch] = true
+}
+
+local POINTER_MOVE_TYPES = {
+    [Enum.UserInputType.MouseMovement] = true,
+    [Enum.UserInputType.Touch] = true
+}
+
+local function IsPrimaryPointerInput(input)
+    return input and PRIMARY_POINTER_TYPES[input.UserInputType] == true
+end
+
+local function IsPointerMoveInput(input)
+    return input and POINTER_MOVE_TYPES[input.UserInputType] == true
+end
+
+local function IsMouseInput(input)
+    return input and input.UserInputType == Enum.UserInputType.MouseButton1
+end
+
+local function IsTouchInput(input)
+    return input and input.UserInputType == Enum.UserInputType.Touch
+end
+
+local function IsMatchingDragInput(originInput, changedInput)
+    if not originInput or not changedInput then
+        return false
+    end
+
+    if changedInput == originInput then
+        return true
+    end
+
+    if IsMouseInput(originInput) and changedInput.UserInputType == Enum.UserInputType.MouseMovement then
+        return true
+    end
+
+    return false
+end
+
+local function ConnectPress(button, callback)
+    AddConnection(button.MouseButton1Click, callback)
+    AddConnection(button.InputEnded, function(input)
+        if IsTouchInput(input) then
+            callback()
+        end
+    end)
+end
+
+local function Clamp01(value)
+    return math.clamp(value, 0, 1)
+end
+
+local function FormatHex(color)
+    return string.format("#%02X%02X%02X",
+        math.clamp(math.floor(color.R * 255 + 0.5), 0, 255),
+        math.clamp(math.floor(color.G * 255 + 0.5), 0, 255),
+        math.clamp(math.floor(color.B * 255 + 0.5), 0, 255)
     )
 end
 
-local function IsPointerMove(input)
-    return input and (
-        input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch
-    )
-end
-
-local function ColorToHex(color)
-    return string.format(
-        "%02X%02X%02X",
-        math.floor(color.R * 255 + 0.5),
-        math.floor(color.G * 255 + 0.5),
-        math.floor(color.B * 255 + 0.5)
-    )
-end
-
-local function HexToColor(hex)
+local function HexToColor3(hex)
     if type(hex) ~= "string" then
         return nil
     end
-    local clean = hex:gsub("#", ""):gsub("%s+", ""):upper()
-    if #clean ~= 6 or clean:match("[^0-9A-F]") then
+
+    local sanitized = hex:gsub("#", ""):upper()
+    if #sanitized == 3 then
+        sanitized = sanitized:gsub(".", "%1%1")
+    end
+
+    if #sanitized ~= 6 or sanitized:find("[^0-9A-F]") then
         return nil
     end
-    local r = tonumber(clean:sub(1, 2), 16)
-    local g = tonumber(clean:sub(3, 4), 16)
-    local b = tonumber(clean:sub(5, 6), 16)
-    if not (r and g and b) then
-        return nil
-    end
-    return Color3.fromRGB(r, g, b)
+
+    return Color3.fromRGB(
+        tonumber(sanitized:sub(1, 2), 16),
+        tonumber(sanitized:sub(3, 4), 16),
+        tonumber(sanitized:sub(5, 6), 16)
+    )
 end
 
 function MakeDraggable(DragPoint, Main)
     pcall(function()
-        local Dragging, DragInput, MousePos, FramePos = false
+        local Dragging, DragInput, PointerPos, FramePos = false
 
         AddConnection(DragPoint.InputBegan, function(Input)
-            if IsPrimaryPress(Input) then
+            if IsPrimaryPointerInput(Input) then
                 Dragging  = true
                 DragInput = Input
-                MousePos  = Input.Position
+                PointerPos  = Input.Position
                 FramePos  = Main.Position
             end
         end)
 
         AddConnection(vgs.UIS.InputEnded, function(Input)
-            if Input == DragInput or IsPrimaryPress(Input) then
+            if DragInput == Input or IsPrimaryPointerInput(Input) then
                 Dragging = false
                 DragInput = nil
             end
         end)
 
         AddConnection(DragPoint.InputChanged, function(Input)
-            if IsPointerMove(Input) then
+            if IsPointerMoveInput(Input) then
                 DragInput = Input
             end
         end)
 
         AddConnection(vgs.UIS.InputChanged, function(Input)
-            if Input == DragInput and Dragging and IsPointerMove(Input) then
-                local Delta = Input.Position - MousePos
-                Main.Position = UDim2.new(
-                    FramePos.X.Scale,
-                    FramePos.X.Offset + Delta.X,
-                    FramePos.Y.Scale,
-                    FramePos.Y.Offset + Delta.Y
-                )
+            if Input == DragInput and Dragging then
+                local Delta = Input.Position - PointerPos
+                vgs.TS:Create(Main, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                    Position = UDim2.new(
+                        FramePos.X.Scale,
+                        FramePos.X.Offset + Delta.X,
+                        FramePos.Y.Scale,
+                        FramePos.Y.Offset + Delta.Y
+                    )
+                }):Play()
             end
         end)
     end)
@@ -823,38 +869,28 @@ function OrionLib:MakeWindow(WindowConfig)
 
     local CloseBtn = SetChildren(SetProps(MakeElement("Button"), {
         Size     = UDim2.new(0.5, 0, 1, 0),
-        Position = UDim2.new(0.5, 0, 0, 0),
-        Name     = "CloseBtn",
-        ZIndex   = 6,
-        Active   = true
+        Position = UDim2.new(0.5, 0, 0, 0)
     }), {
         AddThemeObject(SetProps(MakeElement("Image", "rbxassetid://7072725342"), {
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position    = UDim2.new(0.5, 0, 0.5, 0),
-            Size        = UDim2.new(0, 18, 0, 18),
-            ZIndex      = 7,
-            Name        = "Ico"
+            Size        = UDim2.new(0, 18, 0, 18)
         }), "Text")
     })
 
     local MinimizeBtn = SetChildren(SetProps(MakeElement("Button"), {
-        Size   = UDim2.new(0.5, 0, 1, 0),
-        Name   = "MinimizeBtn",
-        ZIndex = 6,
-        Active = true
+        Size = UDim2.new(0.5, 0, 1, 0)
     }), {
         AddThemeObject(SetProps(MakeElement("Image", "rbxassetid://7072719338"), {
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position    = UDim2.new(0.5, 0, 0.5, 0),
             Size        = UDim2.new(0, 18, 0, 18),
-            Name        = "Ico",
-            ZIndex      = 7
+            Name        = "Ico"
         }), "Text")
     })
 
     local DragPoint = SetProps(MakeElement("TFrame"), {
-        Size   = UDim2.new(1, 0, 0, 36),
-        ZIndex = 1
+        Size = UDim2.new(1, 0, 0, 36)
     })
 
     local ThumbImage = SetProps(MakeElement("Image",
@@ -1260,37 +1296,6 @@ function OrionLib:MakeWindow(WindowConfig)
     }), "Main")
 
     MainWindow.Active = true
-    MainWindow.TopBar.ZIndex = 5
-    MainWindow.TopBar.Active = true
-    WindowName.ZIndex = 7
-
-    local OpenButton = SetChildren(SetProps(MakeElement("RoundFrame", Color3.fromRGB(255, 255, 255), 0, 999), {
-        Parent = Orion,
-        Size = UDim2.new(0, 44, 0, 44),
-        Position = UDim2.new(1, -64, 1, -84),
-        Visible = false,
-        ZIndex = 30
-    }), {
-        AddThemeObject(MakeElement("Stroke"), "Stroke"),
-        AddThemeObject(SetProps(MakeElement("Image", WindowConfig.Icon), {
-            Size = UDim2.new(1, -10, 1, -10),
-            Position = UDim2.new(0, 5, 0, 5),
-            Name = "Icon",
-            ZIndex = 31
-        }), WindowConfig.IconColorChange and "Accent" or "Text"),
-        SetProps(MakeElement("Button"), {
-            Size = UDim2.new(1, 0, 1, 0),
-            Name = "Hitbox",
-            ZIndex = 32,
-            Active = true
-        })
-    })
-
-    local function UpdateOpenButton()
-        if OpenButton and OpenButton.Parent then
-            OpenButton.Visible = UIHidden
-        end
-    end
 
     local SearchOpen = false
 
@@ -1312,7 +1317,6 @@ function OrionLib:MakeWindow(WindowConfig)
         Name                   = "SearchInput",
         Parent                 = MainWindow.TopBar
     })
-    SearchInput.ZIndex = 8
 
     local Acolor = OrionLib.Themes[OrionLib.SelectedTheme].Accent
 
@@ -1452,8 +1456,6 @@ function OrionLib:MakeWindow(WindowConfig)
     resizebtt.AnchorPoint      = Vector2.new(0.1, 0.1)
     resizebtt.BackgroundTransparency = 1
     resizebtt.ClipsDescendants = false
-    resizebtt.Active           = true
-    resizebtt.ZIndex           = 9
 
     local UICorner = Instance.new("UICorner")
     UICorner.CornerRadius = UDim.new(0.5, 0)
@@ -1467,16 +1469,15 @@ function OrionLib:MakeWindow(WindowConfig)
     ResizeIco.Image            = "rbxassetid://153287173"
     ResizeIco.ImageTransparency = 0.3
     ResizeIco.Parent           = resizebtt
-    ResizeIco.ZIndex           = 10
 
     local drgg    = false
     local mspos   = nil
     local nresize = 0
     local default = UDim2.new(0, 615, 0, 344)
-    local resizePointer = nil
+    local resizeInput = nil
 
     AddConnection(resizebtt.InputBegan, function(input)
-        if IsPrimaryPress(input) then
+        if IsPrimaryPointerInput(input) then
             local cctime = tick()
 
             if cctime - nresize <= 0.5 then
@@ -1484,11 +1485,10 @@ function OrionLib:MakeWindow(WindowConfig)
                     Size = default
                 }):Play()
                 drgg = false
-                resizePointer = nil
             else
-                drgg          = true
-                resizePointer = input
-                mspos         = input.Position
+                drgg  = true
+                mspos = input.Position
+                resizeInput = input
             end
 
             nresize = cctime
@@ -1496,7 +1496,7 @@ function OrionLib:MakeWindow(WindowConfig)
     end)
 
     AddConnection(vgs.UIS.InputChanged, function(input)
-        if drgg and input == resizePointer and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        if drgg and IsPointerMoveInput(input) and IsMatchingDragInput(resizeInput, input) then
             local delta = input.Position - mspos
             mspos = input.Position
             MainWindow.Size = UDim2.new(
@@ -1507,9 +1507,9 @@ function OrionLib:MakeWindow(WindowConfig)
     end)
 
     AddConnection(vgs.UIS.InputEnded, function(input)
-        if input == resizePointer or IsPrimaryPress(input) then
+        if drgg and (input == resizeInput or IsMouseInput(resizeInput) and IsMouseInput(input)) then
             drgg = false
-            resizePointer = nil
+            resizeInput = nil
         end
     end)
 
@@ -1517,7 +1517,7 @@ function OrionLib:MakeWindow(WindowConfig)
     local dctime = 0.15
 
     AddConnection(DragPoint.InputBegan, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if IsPrimaryPointerInput(input) then
             local cctime2  = tick()
             local timediff = cctime2 - lctime
 
@@ -1570,7 +1570,6 @@ function OrionLib:MakeWindow(WindowConfig)
             }), "Accent")
         end
         WindowIcon.Parent = MainWindow.TopBar
-        WindowIcon.ZIndex = 8
 
         local bclse = Csearch
         Csearch = function()
@@ -1586,7 +1585,7 @@ function OrionLib:MakeWindow(WindowConfig)
         end
 
         AddConnection(WindowIcon.InputBegan, function(input)
-            if not IsPrimaryPress(input) then return end
+            if not IsPrimaryPointerInput(input) then return end
             if minimized then return end
 
             if iconSearchOpen then
@@ -1628,7 +1627,7 @@ function OrionLib:MakeWindow(WindowConfig)
         end)
 
         AddConnection(WindowIcon.InputEnded, function(input)
-            if not IsPrimaryPress(input) then return end
+            if not IsPrimaryPointerInput(input) then return end
             if not iconha then return end
             iconha    = false
             nmpg.Size = UDim2.new(0, 0, 0, 2)
@@ -1639,17 +1638,6 @@ function OrionLib:MakeWindow(WindowConfig)
                 vgs.TS:Create(WindowIcon, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
                     Rotation = 0
                 }):Play()
-            end
-        end)
-
-        AddConnection(WindowIcon.Activated, function()
-            if not vgs.UIS.TouchEnabled then return end
-            if minimized then return end
-            if WindowConfig.SearchBar == false then return end
-            if SearchOpen or iconSearchOpen then
-                Csearch()
-            else
-                Osearch()
             end
         end)
     end
@@ -1694,10 +1682,8 @@ function OrionLib:MakeWindow(WindowConfig)
     })
 
 	nclc = SetProps(MakeElement("Button"), {
-		ZIndex = 8, Parent = MainWindow.TopBar, Active = true
+		ZIndex = 3, Parent = MainWindow.TopBar
 	})
-
-    nmebox.ZIndex = 8
 
 	local function syncsyz()
 		local pos  = WindowName.Position
@@ -1744,7 +1730,7 @@ function OrionLib:MakeWindow(WindowConfig)
 	local Hcpl = false
 
 	AddConnection(nclc.InputBegan, function(input)
-		if not IsPrimaryPress(input) then return end
+		if not IsPrimaryPointerInput(input) then return end
 		if minimized then return end
 		if iconha then
 			iconha = false
@@ -1771,7 +1757,7 @@ function OrionLib:MakeWindow(WindowConfig)
 	end)
 
 	AddConnection(nclc.InputEnded, function(input)
-		if not IsPrimaryPress(input) then return end
+		if not IsPrimaryPointerInput(input) then return end
 		if Hcpl then Hcpl = false; return end
 		ha = false
 		nmpg.Size = UDim2.new(0,0,0,2)
@@ -1788,15 +1774,7 @@ function OrionLib:MakeWindow(WindowConfig)
 			vgs.TS:Create(WindowName, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 				{Position = UDim2.new(baseS, baseX, 0, 0)}):Play()
 		end)
-    end)
-
-    AddConnection(nclc.Activated, function()
-        if not vgs.UIS.TouchEnabled then return end
-        if minimized then return end
-        if not nedit then
-            Onme()
-        end
-    end)
+	end)
 
 	AddConnection(nmebox.FocusLost, function()
 		CNe(true)
@@ -1810,47 +1788,57 @@ function OrionLib:MakeWindow(WindowConfig)
 
 	MakeDraggable(DragPoint, MainWindow)
 
-    AddConnection(OpenButton.Hitbox.Activated, function()
-        MainWindow.Visible = true
-        UIHidden = false
-        if WindowConfig.FreeMouse then UnlockMouse(true) end
-        UpdateOpenButton()
-    end)
+	local ReopenBtn = AddThemeObject(SetChildren(SetProps(MakeElement("RoundFrame", Color3.fromRGB(255, 255, 255), 1, 0), {
+		Parent = Orion,
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -18, 1, -18),
+		Size = UDim2.new(0, 46, 0, 46),
+		Visible = false,
+		ZIndex = 25
+	}), {
+		AddThemeObject(MakeElement("Stroke"), "Stroke"),
+		SetProps(MakeElement("Button"), {
+			Size = UDim2.new(1, 0, 1, 0),
+			ZIndex = 26,
+			Name = "Hitbox"
+		}),
+		AddThemeObject(SetProps(MakeElement("Image", "rbxassetid://7072719338"), {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0.5, 0, 0.5, 0),
+			Size = UDim2.new(0, 20, 0, 20),
+			ZIndex = 26
+		}), "Text")
+	}), "Second")
 
-    AddConnection(MainWindow:GetPropertyChangedSignal("Visible"), function()
-        if MainWindow.Visible then
-            UIHidden = false
-        end
-        UpdateOpenButton()
-    end)
-
-	AddConnection(CloseBtn.MouseButton1Up, function()
-		MainWindow.Visible = false; UIHidden = true
+	local function HideWindow()
+		MainWindow.Visible = false
+		UIHidden = true
+		ReopenBtn.Visible = true
 		if WindowConfig.FreeMouse then UnlockMouse(false) end
 		WindowConfig.CloseCallback()
-        UpdateOpenButton()
+	end
+
+	local function ShowWindow()
+		MainWindow.Visible = true
+		UIHidden = false
+		ReopenBtn.Visible = false
+		if WindowConfig.FreeMouse then UnlockMouse(true) end
+	end
+
+	ConnectPress(CloseBtn, function()
+		HideWindow()
 	end)
 
-    AddConnection(CloseBtn.Activated, function()
-        if not vgs.UIS.TouchEnabled then return end
-        MainWindow.Visible = false
-        UIHidden = true
-        if WindowConfig.FreeMouse then UnlockMouse(false) end
-        WindowConfig.CloseCallback()
-        UpdateOpenButton()
-    end)
+	ConnectPress(ReopenBtn.Hitbox, function()
+		ShowWindow()
+	end)
 
 	AddConnection(vgs.UIS.InputBegan, function(Input, Focus)
 		if not Focus then
 			if Input.KeyCode == Enum.KeyCode[WindowConfig.Openkey] and UIHidden then
-				MainWindow.Visible = true; UIHidden = false
-				if WindowConfig.FreeMouse then UnlockMouse(true) end
-                UpdateOpenButton()
+				ShowWindow()
 			elseif Input.KeyCode == Enum.KeyCode[WindowConfig.Openkey] and not UIHidden then
-				MainWindow.Visible = false; UIHidden = true
-				if WindowConfig.FreeMouse then UnlockMouse(false) end
-				WindowConfig.CloseCallback()
-                UpdateOpenButton()
+				HideWindow()
 				OrionLib:MakeNotification({Name="Interface Hidden", Content="Tap "..WindowConfig.Openkey.." to reopen the interface", Time=3})
 			end
 		end
@@ -1877,7 +1865,7 @@ function OrionLib:MakeWindow(WindowConfig)
 
 	AddConnection(WindowName:GetPropertyChangedSignal("TextBounds"), updminframe)
 
-	local function ToggleMinimize()
+	ConnectPress(MinimizeBtn, function()
 		if reztween then reztween:Cancel(); reztween = nil end
 		if mintween then mintween:Cancel(); mintween = nil end
 		minimized = not minimized
@@ -1914,14 +1902,7 @@ function OrionLib:MakeWindow(WindowConfig)
 			end)
 			mintween.Completed:Wait()
 		end
-	end
-
-	AddConnection(MinimizeBtn.MouseButton1Click, ToggleMinimize)
-
-    AddConnection(MinimizeBtn.Activated, function()
-        if not vgs.UIS.TouchEnabled then return end
-        ToggleMinimize()
-    end)
+	end)
 
 	local function LoadSequence()
 		MainWindow.Visible = false
@@ -1989,9 +1970,6 @@ function OrionLib:MakeWindow(WindowConfig)
 			WindowIcon.Parent = MainWindow.TopBar
 		end
 		WindowConfig.Icon = ficon
-        if OpenButton and OpenButton:FindFirstChild("Icon") then
-            OpenButton.Icon.Image = ficon
-        end
 	end
 
 	function Functions:SetName(...)
@@ -2097,14 +2075,9 @@ function OrionLib:MakeWindow(WindowConfig)
 			end
 		end
 
-		AddConnection(TabFrame.MouseButton1Click, function()
+		ConnectPress(TabFrame, function()
 			Gotab(TabConfig.Name)
 		end)
-
-        AddConnection(TabFrame.Activated, function()
-            if not vgs.UIS.TouchEnabled then return end
-            Gotab(TabConfig.Name)
-        end)
 
 		local function Getelmnts(ItemParent, _tabName)
 			local lreg = nil
@@ -2446,29 +2419,25 @@ function OrionLib:MakeWindow(WindowConfig)
 					ButtonFrame.BackgroundColor3 = OrionLib.Themes[OrionLib.SelectedTheme].Second
 				end)
 			
-				AddConnection(Click.MouseButton1Down, function()
+				AddConnection(Click.InputBegan, function(input)
+					if not IsPrimaryPointerInput(input) then return end
 					Ip = true
 					PIns = true 
 					UpdateColor()
 				end)
 			
-				AddConnection(Click.MouseButton1Up, function()
+				AddConnection(Click.InputEnded, function(input)
+					if not IsPrimaryPointerInput(input) then return end
 					Ip = false
 					UpdateColor()
-					
-					if PIns then
-						spawn(function()
-							ButtonConfig.Callback()
-						end)
-					end
-					
 					PIns = false  
 				end)
 
-                AddConnection(Click.Activated, function()
-                    if not vgs.UIS.TouchEnabled then return end
-                    task.spawn(ButtonConfig.Callback)
-                end)
+				ConnectPress(Click, function()
+					spawn(function()
+						ButtonConfig.Callback()
+					end)
+				end)
 			
 				function Button:Set(ButtonText)
 					ButtonFrame.Content.Text = ButtonText
@@ -2569,21 +2538,16 @@ function OrionLib:MakeWindow(WindowConfig)
 					}):Play()
 				end)
 			
-				AddConnection(Click.MouseButton1Up, function()
+				ConnectPress(Click, function()
 					vgs.TS:Create(ToggleFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
 						BackgroundColor3 = Color3.fromRGB(OrionLib.Themes[OrionLib.SelectedTheme].Second.R * 255 + 3, OrionLib.Themes[OrionLib.SelectedTheme].Second.G * 255 + 3, OrionLib.Themes[OrionLib.SelectedTheme].Second.B * 255 + 3)
 					}):Play()
 					SaveCfg(game.GameId)
 					Toggle:Set(not Toggle.Value)
 				end)
-
-                AddConnection(Click.Activated, function()
-                    if not vgs.UIS.TouchEnabled then return end
-                    SaveCfg(game.GameId)
-                    Toggle:Set(not Toggle.Value)
-                end)
 			
-				AddConnection(Click.MouseButton1Down, function()
+				AddConnection(Click.InputBegan, function(input)
+					if not IsPrimaryPointerInput(input) then return end
 					vgs.TS:Create(ToggleFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
 						BackgroundColor3 = Color3.fromRGB(OrionLib.Themes[OrionLib.SelectedTheme].Second.R * 255 + 6, OrionLib.Themes[OrionLib.SelectedTheme].Second.G * 255 + 6, OrionLib.Themes[OrionLib.SelectedTheme].Second.B * 255 + 6)
 					}):Play()
@@ -2884,18 +2848,18 @@ function OrionLib:MakeWindow(WindowConfig)
 				end
 			
 				AddConnection(sb.InputBegan, function(i)
-					if IsPrimaryPress(i) and sb.Active then
+					if IsPrimaryPointerInput(i) and sb.Active then
 						st.drg = true
-                        st.pointer = i
+						st.di = i
 						s.IsClicking = true
 						vgs.TS:Create(sb, TweenInfo.new(0.15), {BackgroundTransparency = 0.7}):Play()
 					end
 				end)
 			
 				AddConnection(sb.InputEnded, function(i)
-					if i == st.pointer or IsPrimaryPress(i) then
+					if IsPrimaryPointerInput(i) then
 						st.drg = false
-                        st.pointer = nil
+						st.di = nil
 						s.IsClicking = false
 						vgs.TS:Create(sb, TweenInfo.new(0.25), {BackgroundTransparency = 0.9}):Play()
 					end
@@ -2903,8 +2867,8 @@ function OrionLib:MakeWindow(WindowConfig)
 			
 				st.ic = AddConnection(vgs.UIS.InputChanged, function(i)
 					if not st.drg then return end
-					if i ~= st.pointer and not IsPointerMove(i) then return end
-                    if st.pointer and i ~= st.pointer then return end
+					if not IsPointerMoveInput(i) then return end
+					if not IsMatchingDragInput(st.di, i) and not IsTouchInput(i) then return end
 					if not sb.Active then return end
 					if not sb.Parent then return end
 			
@@ -3320,7 +3284,7 @@ function OrionLib:MakeWindow(WindowConfig)
 						}), "Divider")
 					end
 			
-					AddConnection(OptBtn.MouseButton1Click, function()
+					ConnectPress(OptBtn, function()
 						if DropdownConfig.Multi then
 							local index = table.find(Dropdown.Value, optVal)
 							if index then
@@ -3342,30 +3306,6 @@ function OrionLib:MakeWindow(WindowConfig)
 						end
 						pcall(function() SaveCfg(game.GameId) end)
 					end)
-
-                    AddConnection(OptBtn.Activated, function()
-                        if not vgs.UIS.TouchEnabled then return end
-                        if DropdownConfig.Multi then
-                            local index = table.find(Dropdown.Value, optVal)
-                            if index then
-                                table.remove(Dropdown.Value, index)
-                            else
-                                table.insert(Dropdown.Value, optVal)
-                            end
-                            Dropdown:UpdSel()
-                        else
-                            Dropdown:Set(optVal)
-                            Dropdown.Toggled = false
-                            Dropdown.srchMode = false
-                            if DropdownConfig.Searchable and SrchBox then
-                                SrchBox.Text = ""
-                                Dropdown.srchTxt = ""
-                                relfcs()
-                            end
-                            Dropdown:UpdVis()
-                        end
-                        pcall(function() SaveCfg(game.GameId) end)
-                    end)
 			
 					AddConnection(OptBtn.MouseEnter, function()
 						vgs.TS:Create(OptBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.8}):Play()
@@ -3703,31 +3643,18 @@ function OrionLib:MakeWindow(WindowConfig)
 					self:UpdSel()
 				end
 			
-				AddConnection(Click.MouseButton1Click, function()
+				ConnectPress(Click, function()
 					Dropdown.Toggled = not Dropdown.Toggled
 					if not Dropdown.Toggled then Dropdown.srchMode = false end
 					Dropdown:UpdVis()
 				end)
-
-                AddConnection(Click.Activated, function()
-                    if not vgs.UIS.TouchEnabled then return end
-                    Dropdown.Toggled = not Dropdown.Toggled
-                    if not Dropdown.Toggled then Dropdown.srchMode = false end
-                    Dropdown:UpdVis()
-                end)
 			
 				if DropdownConfig.Searchable and SrchTgl then
-					AddConnection(SrchTgl.MouseButton1Click, function()
+					ConnectPress(SrchTgl, function()
 						Dropdown.srchMode = not Dropdown.srchMode
 						vgs.TS:Create(SrchTgl.SearchArrow, TweenInfo.new(0.15), {Rotation = Dropdown.srchMode and 0 or 180}):Play()
 						Dropdown:UpdVis()
 					end)
-                    AddConnection(SrchTgl.Activated, function()
-                        if not vgs.UIS.TouchEnabled then return end
-                        Dropdown.srchMode = not Dropdown.srchMode
-                        vgs.TS:Create(SrchTgl.SearchArrow, TweenInfo.new(0.15), {Rotation = Dropdown.srchMode and 0 or 180}):Play()
-                        Dropdown:UpdVis()
-                    end)
 					AddConnection(SrchTgl.MouseEnter, function()
 						vgs.TS:Create(SrchTgl.SearchArrow, TweenInfo.new(0.15), {ImageColor3 = Color3.fromRGB(255, 255, 255)}):Play()
 					end)
@@ -3890,20 +3817,11 @@ function OrionLib:MakeWindow(WindowConfig)
 					vgs.TS:Create(BindBox, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(0, BindBox.Value.TextBounds.X + 19, 0, 24)}):Play()
 				end)
 
-				AddConnection(Click.InputEnded, function(Input)
-					if IsPrimaryPress(Input) then
-						if Bind.Binding then return end
-						Bind.Binding = true
-						BindBox.Value.Text = ""
-					end
+				ConnectPress(Click, function()
+					if Bind.Binding then return end
+					Bind.Binding = true
+					BindBox.Value.Text = ""
 				end)
-
-                AddConnection(Click.Activated, function()
-                    if not vgs.UIS.TouchEnabled then return end
-                    if Bind.Binding then return end
-                    Bind.Binding = true
-                    BindBox.Value.Text = ""
-                end)
 
 				AddConnection(vgs.UIS.InputBegan, function(Input)
 					if vgs.UIS:GetFocusedTextBox() then return end
@@ -3963,11 +3881,12 @@ function OrionLib:MakeWindow(WindowConfig)
 					vgs.TS:Create(BindFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundColor3 = OrionLib.Themes[OrionLib.SelectedTheme].Second}):Play()
 				end)
 
-				AddConnection(Click.MouseButton1Up, function()
+				ConnectPress(Click, function()
 					vgs.TS:Create(BindFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundColor3 = Color3.fromRGB(OrionLib.Themes[OrionLib.SelectedTheme].Second.R * 255 + 3, OrionLib.Themes[OrionLib.SelectedTheme].Second.G * 255 + 3, OrionLib.Themes[OrionLib.SelectedTheme].Second.B * 255 + 3)}):Play()
 				end)
 
-				AddConnection(Click.MouseButton1Down, function()
+				AddConnection(Click.InputBegan, function(Input)
+					if not IsPrimaryPointerInput(Input) then return end
 					vgs.TS:Create(BindFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundColor3 = Color3.fromRGB(OrionLib.Themes[OrionLib.SelectedTheme].Second.R * 255 + 6, OrionLib.Themes[OrionLib.SelectedTheme].Second.G * 255 + 6, OrionLib.Themes[OrionLib.SelectedTheme].Second.B * 255 + 6)}):Play()
 				end)
 
@@ -4059,6 +3978,12 @@ function OrionLib:MakeWindow(WindowConfig)
 						TextContainer.Size = UDim2.new(0, 24, 0, 24)
 					end
 				end)
+
+				AddConnection(TextboxActual.Focused, function()
+					vgs.TS:Create(TextboxFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+						BackgroundColor3 = Color3.fromRGB(OrionLib.Themes[OrionLib.SelectedTheme].Second.R * 255 + 6, OrionLib.Themes[OrionLib.SelectedTheme].Second.G * 255 + 6, OrionLib.Themes[OrionLib.SelectedTheme].Second.B * 255 + 6)
+					}):Play()
+				end)
 			
 				TextboxActual.Text = TextboxConfig.Default
 			
@@ -4070,17 +3995,13 @@ function OrionLib:MakeWindow(WindowConfig)
 					vgs.TS:Create(TextboxFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundColor3 = OrionLib.Themes[OrionLib.SelectedTheme].Second}):Play()
 				end)
 			
-				AddConnection(Click.MouseButton1Up, function()
+				ConnectPress(Click, function()
 					vgs.TS:Create(TextboxFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundColor3 = Color3.fromRGB(OrionLib.Themes[OrionLib.SelectedTheme].Second.R * 255 + 3, OrionLib.Themes[OrionLib.SelectedTheme].Second.G * 255 + 3, OrionLib.Themes[OrionLib.SelectedTheme].Second.B * 255 + 3)}):Play()
 					TextboxActual:CaptureFocus()
 				end)
-
-                AddConnection(Click.Activated, function()
-                    if not vgs.UIS.TouchEnabled then return end
-                    TextboxActual:CaptureFocus()
-                end)
 			
-				AddConnection(Click.MouseButton1Down, function()
+				AddConnection(Click.InputBegan, function(input)
+					if not IsPrimaryPointerInput(input) then return end
 					vgs.TS:Create(TextboxFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundColor3 = Color3.fromRGB(OrionLib.Themes[OrionLib.SelectedTheme].Second.R * 255 + 6, OrionLib.Themes[OrionLib.SelectedTheme].Second.G * 255 + 6, OrionLib.Themes[OrionLib.SelectedTheme].Second.B * 255 + 6)}):Play()
 				end)
 			end
@@ -4150,7 +4071,7 @@ function OrionLib:MakeWindow(WindowConfig)
 			
 				local ColorpickerContainer = Create("Frame", {
 					Position = UDim2.new(0, 0, 0, 32),
-					Size = UDim2.new(1, 0, 1, -32),
+					Size = UDim2.new(1, 0, 1, -66),
 					BackgroundTransparency = 1,
 					ClipsDescendants = true
 				}, {
@@ -4158,40 +4079,10 @@ function OrionLib:MakeWindow(WindowConfig)
 					Create("UIPadding", {
 						PaddingLeft = UDim.new(0, 35),
 						PaddingRight = UDim.new(0, 35),
-						PaddingBottom = UDim.new(0, 42),
+						PaddingBottom = UDim.new(0, 6),
 						PaddingTop = UDim.new(0, 17)
 					})
 				})
-
-                local HexBox = AddThemeObject(Create("TextBox", {
-                    Size = UDim2.new(1, -12, 1, 0),
-                    Position = UDim2.new(0, 8, 0, 0),
-                    BackgroundTransparency = 1,
-                    TextColor3 = Color3.fromRGB(255, 255, 255),
-                    PlaceholderColor3 = Color3.fromRGB(160, 160, 170),
-                    PlaceholderText = "RRGGBB",
-                    Text = "",
-                    ClearTextOnFocus = false,
-                    Font = Enum.Font.GothamSemibold,
-                    TextSize = 13,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    Visible = false
-                }), "Text")
-
-                local HexFrame = AddThemeObject(SetChildren(SetProps(MakeElement("RoundFrame", Color3.fromRGB(255, 255, 255), 0, 5), {
-                    Size = UDim2.new(1, -70, 0, 24),
-                    Position = UDim2.new(0, 35, 1, -30),
-                    Visible = false
-                }), {
-                    AddThemeObject(MakeElement("Stroke"), "Stroke"),
-                    AddThemeObject(SetProps(MakeElement("Label", "#", 13), {
-                        Size = UDim2.new(0, 10, 1, 0),
-                        Position = UDim2.new(0, 8, 0, 0),
-                        Font = Enum.Font.GothamBold,
-                        TextXAlignment = Enum.TextXAlignment.Left
-                    }), "TextDark"),
-                    HexBox
-                }), "Main")
 			
 				local Click = SetProps(MakeElement("Button"), {Size = UDim2.new(1, 0, 1, 0)})
 				local ColorpickerBox = SetChildren(SetProps(MakeElement("RoundFrame", ColorpickerConfig.Default, 0, 4), {
@@ -4199,6 +4090,30 @@ function OrionLib:MakeWindow(WindowConfig)
 					Position = UDim2.new(1, -12, 0.5, 0),
 					AnchorPoint = Vector2.new(1, 0.5)
 				}), {AddThemeObject(MakeElement("Stroke"), "Stroke")})
+
+				local HexInput = AddThemeObject(Create("TextBox", {
+					Size = UDim2.new(1, -10, 1, 0),
+					Position = UDim2.new(0, 5, 0, 0),
+					BackgroundTransparency = 1,
+					TextColor3 = Color3.fromRGB(255, 255, 255),
+					PlaceholderColor3 = Color3.fromRGB(180, 180, 185),
+					PlaceholderText = "#FFFFFF",
+					Text = "",
+					ClearTextOnFocus = false,
+					Font = Enum.Font.GothamSemibold,
+					TextSize = 13,
+					TextXAlignment = Enum.TextXAlignment.Center
+				}), "Text")
+
+				local HexBox = AddThemeObject(SetChildren(SetProps(MakeElement("RoundFrame", Color3.fromRGB(255, 255, 255), 0, 4), {
+					Size = UDim2.new(1, -24, 0, 26),
+					Position = UDim2.new(0, 12, 1, -34),
+					Visible = false,
+					Name = "HexBox"
+				}), {
+					AddThemeObject(MakeElement("Stroke"), "Stroke"),
+					HexInput
+				}), "Main")
 			
 				local ColorpickerFrame = AddThemeObject(SetChildren(SetProps(MakeElement("RoundFrame", Color3.fromRGB(255, 255, 255), 0, 5), {
 					Size = UDim2.new(1, 0, 0, 38),
@@ -4224,167 +4139,128 @@ function OrionLib:MakeWindow(WindowConfig)
 						ClipsDescendants = true,
 						Name = "F"
 					}),
-                    HexFrame,
 					ColorpickerContainer,
+					HexBox,
 					AddThemeObject(MakeElement("Stroke"), "Stroke")
 				}), "Second")
 			
 				Relem(_tabName, ColorpickerConfig.Name, ColorpickerFrame)
 			
 				local ColorInput, HueInput
-                local ActiveColorPointer, ActiveHuePointer
-			
-				local function ToggleColorpicker()
+				local UpdatingHex = false
+
+				local function SyncHex()
+					UpdatingHex = true
+					HexInput.Text = FormatHex(Colorpicker.Value)
+					UpdatingHex = false
+				end
+
+				local function UpdateColorFromPosition(position)
+					local ax, ay = Color.AbsolutePosition.X, Color.AbsolutePosition.Y
+					local aw, ah = Color.AbsoluteSize.X, Color.AbsoluteSize.Y
+					local x = math.clamp(position.X - ax, 0, aw) / aw
+					local y = math.clamp(position.Y - ay, 0, ah) / ah
+					ColorSelection.Position = UDim2.new(x, 0, y, 0)
+					ColorS, ColorV = x, 1 - y
+				end
+
+				local function UpdateHueFromPosition(position)
+					local ay, ah = Hue.AbsolutePosition.Y, Hue.AbsoluteSize.Y
+					local y = math.clamp(position.Y - ay, 0, ah) / ah
+					HueSelection.Position = UDim2.new(0.5, 0, y, 0)
+					ColorH = 1 - y
+				end
+
+				ConnectPress(Click, function()
 					Colorpicker.Toggled = not Colorpicker.Toggled
 					vgs.TS:Create(ColorpickerFrame, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {
-						Size = Colorpicker.Toggled and UDim2.new(1, 0, 0, 176) or UDim2.new(1, 0, 0, 38)
+						Size = Colorpicker.Toggled and UDim2.new(1, 0, 0, 182) or UDim2.new(1, 0, 0, 38)
 					}):Play()
 					Color.Visible = Colorpicker.Toggled
 					Hue.Visible = Colorpicker.Toggled
-                    HexFrame.Visible = Colorpicker.Toggled
-                    HexBox.Visible = Colorpicker.Toggled
+					HexBox.Visible = Colorpicker.Toggled
 					ColorpickerFrame.F.Line.Visible = Colorpicker.Toggled
-				end
-
-				AddConnection(Click.MouseButton1Click, ToggleColorpicker)
-                AddConnection(Click.Activated, function()
-                    if vgs.UIS.TouchEnabled then
-                        ToggleColorpicker()
-                    end
-                end)
+				end)
 			
 				local function UpdateColorPicker()
 					ColorpickerBox.BackgroundColor3 = Color3.fromHSV(ColorH, ColorS, ColorV)
 					Color.BackgroundColor3 = Color3.fromHSV(ColorH, 1, 1)
 					Colorpicker.Value = ColorpickerBox.BackgroundColor3 
-                    HexBox.Text = ColorToHex(Colorpicker.Value)
+					SyncHex()
 					if ColorpickerConfig.Mode == 1 then
 						ColorpickerConfig.Callback(Colorpicker.Value)
 					end
 					if ColorpickerConfig.Save then SaveCfg(game.GameId) end
 				end
 			
-                local function PointerPos(pointer)
-                    if pointer and pointer.Position then
-                        return pointer.Position
-                    end
-                    return Vector2.new(vgs.MS.X, vgs.MS.Y)
-                end
-
-                local function StopColorInput()
-                    if ColorInput then
-                        if ColorpickerConfig.Mode == 2 then
-                            ColorpickerConfig.Callback(Colorpicker.Value)
-                        end
-                        ColorInput:Disconnect()
-                        ColorInput = nil
-                    end
-                    ActiveColorPointer = nil
-                end
-
-                local function StopHueInput()
-                    if HueInput then
-                        if ColorpickerConfig.Mode == 2 then
-                            ColorpickerConfig.Callback(Colorpicker.Value)
-                        end
-                        HueInput:Disconnect()
-                        HueInput = nil
-                    end
-                    ActiveHuePointer = nil
-                end
-
 				AddConnection(Color.InputBegan, function(input)
-					if IsPrimaryPress(input) then
-                        ActiveColorPointer = input
-						if ColorInput then ColorInput:Disconnect() end
-						ColorInput = AddConnection(vgs.RS.Heartbeat, function(dt)
-							acc += dt
-							if acc < rate then
-								return
-							end
-							acc -= rate
-						
-                            local pos = PointerPos(ActiveColorPointer)
-							local ax, ay = Color.AbsolutePosition.X, Color.AbsolutePosition.Y
-							local aw, ah = Color.AbsoluteSize.X, Color.AbsoluteSize.Y
-							local x = math.clamp(pos.X - ax, 0, aw) / aw
-							local y = math.clamp(pos.Y - ay, 0, ah) / ah
-						
-							ColorSelection.Position = UDim2.new(x, 0, y, 0)
-							ColorS, ColorV = x, 1 - y
-							UpdateColorPicker()
-						end)
-					end
+					if not IsPrimaryPointerInput(input) then return end
+					ColorInput = input
+					UpdateColorFromPosition(input.Position)
+					UpdateColorPicker()
 				end)
 			
-				AddConnection(Color.InputEnded, function(input)
-					if input == ActiveColorPointer or IsPrimaryPress(input) then
-                        StopColorInput()
+				AddConnection(vgs.UIS.InputChanged, function(input)
+					if ColorInput and IsPointerMoveInput(input) and IsMatchingDragInput(ColorInput, input) then
+						UpdateColorFromPosition(input.Position)
+						UpdateColorPicker()
+					end
+					if HueInput and IsPointerMoveInput(input) and IsMatchingDragInput(HueInput, input) then
+						UpdateHueFromPosition(input.Position)
+						UpdateColorPicker()
 					end
 				end)
-			
+
+				AddConnection(vgs.UIS.InputEnded, function(input)
+					if ColorInput and (input == ColorInput or IsMouseInput(ColorInput) and IsMouseInput(input)) then
+						if ColorpickerConfig.Mode == 2 then
+							ColorpickerConfig.Callback(Colorpicker.Value)
+						end
+						ColorInput = nil
+					end
+					if HueInput and (input == HueInput or IsMouseInput(HueInput) and IsMouseInput(input)) then
+						if ColorpickerConfig.Mode == 2 then
+							ColorpickerConfig.Callback(Colorpicker.Value)
+						end
+						HueInput = nil
+					end
+				end)
+
 				AddConnection(Hue.InputBegan, function(input)
-					if IsPrimaryPress(input) then
-                        ActiveHuePointer = input
-						if HueInput then HueInput:Disconnect() end
-						HueInput = AddConnection(vgs.RS.Heartbeat, function(dt)
-							acc += dt
-							if acc < rate then
-								return
-							end
-							acc -= rate
-                            local pos = PointerPos(ActiveHuePointer)
-							local ay, ah = Hue.AbsolutePosition.Y, Hue.AbsoluteSize.Y
-							local y = math.clamp(pos.Y - ay, 0, ah) / ah
-							HueSelection.Position = UDim2.new(0.5, 0, y, 0)
-							ColorH = 1 - y
-							UpdateColorPicker()
-						end)
-					end
-				end)
-			
-				AddConnection(Hue.InputEnded, function(input)
-					if input == ActiveHuePointer or IsPrimaryPress(input) then
-                        StopHueInput()
-					end
+					if not IsPrimaryPointerInput(input) then return end
+					HueInput = input
+					UpdateHueFromPosition(input.Position)
+					UpdateColorPicker()
 				end)
 
-                AddConnection(vgs.UIS.InputEnded, function(input)
-                    if input == ActiveColorPointer then
-                        StopColorInput()
-                    end
-                    if input == ActiveHuePointer then
-                        StopHueInput()
-                    end
-                end)
+				AddConnection(HexBox.InputBegan, function(input)
+					if not IsPrimaryPointerInput(input) then return end
+					HexInput:CaptureFocus()
+				end)
 
-                AddConnection(HexBox.Focused, function()
-                    HexBox.Text = ColorToHex(Colorpicker.Value)
-                end)
+				AddConnection(HexInput.Focused, function()
+					if UpdatingHex then return end
+					HexInput.Text = FormatHex(Colorpicker.Value)
+				end)
 
-                AddConnection(HexBox.FocusLost, function()
-                    local parsed = HexToColor(HexBox.Text)
-                    if not parsed then
-                        HexBox.Text = ColorToHex(Colorpicker.Value)
-                        return
-                    end
-                    ColorH, ColorS, ColorV = Color3.toHSV(parsed)
-                    ColorSelection.Position = UDim2.new(ColorS, 0, 1 - ColorV, 0)
-                    HueSelection.Position = UDim2.new(0.5, 0, 1 - ColorH, 0)
-                    UpdateColorPicker()
-                    if ColorpickerConfig.Mode == 2 then
-                        ColorpickerConfig.Callback(Colorpicker.Value)
-                    end
-                end)
+				AddConnection(HexInput.FocusLost, function()
+					local nextColor = HexToColor3(HexInput.Text)
+					if nextColor then
+						Colorpicker:Set(nextColor)
+						if ColorpickerConfig.Save then SaveCfg(game.GameId) end
+					else
+						SyncHex()
+					end
+				end)
 			
 				function Colorpicker:Set(Value)
 					Colorpicker.Value = Value
 					ColorH, ColorS, ColorV = Color3.toHSV(Value)
 					ColorpickerBox.BackgroundColor3 = Value
-					Color.BackgroundColor3 = Color3.fromHSV(ColorH, 1, 1) --Color3.fromHSV(ColorH, 1, 1)
+					Color.BackgroundColor3 = Color3.fromHSV(ColorH, 1, 1)
 					ColorSelection.Position = UDim2.new(ColorS, 0, 1 - ColorV)
 					HueSelection.Position = UDim2.new(0.5, 0, 1 - ColorH)
-                    HexBox.Text = ColorToHex(Value)
+					SyncHex()
 					ColorpickerConfig.Callback(Value)
 				end
 			
@@ -4417,12 +4293,11 @@ function OrionLib:MakeWindow(WindowConfig)
 			function ElementFunction:AddSmartTheme()
 				local gersec = self
 				
-				local basePicker = gersec:AddColorpicker({
+				
+				gersec:AddColorpicker({
 					Name = "Base Color",
 					Default = OrionLib.Themes[OrionLib.SelectedTheme].Main,
 					Mode = 2,
-                    Save = true,
-                    Flag = "__orion_theme_main",
 					Callback = function(Value)
 						local newTheme = OrionLib:GenTheme(Value)
 						OrionLib.Themes.Custom = newTheme
@@ -4435,13 +4310,10 @@ function OrionLib:MakeWindow(WindowConfig)
 					Name = "Reset Theme",
 					Callback = function()
 						OrionLib.SelectedTheme = "Default"
-                        if basePicker then
-                            basePicker:Set(OrionLib.Themes.Default.Main)
-                        end
 						OrionLib:SetTheme()
-                        SaveCfg(game.GameId)
 					end
 				})
+				OrionLib.SelectedTheme = "Default"
 				OrionLib:SetTheme()
 			end
 
