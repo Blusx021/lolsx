@@ -129,13 +129,6 @@ function AddConnection(Signal, Function)
     end
 end
 
-local function IsPrimaryPress(input)
-    return input and (
-        input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch
-    )
-end
-
 function MakeDraggable(DragPoint, Main)
     pcall(function()
         local Dragging, DragInput, MousePos, FramePos = false
@@ -790,38 +783,28 @@ function OrionLib:MakeWindow(WindowConfig)
 
     local CloseBtn = SetChildren(SetProps(MakeElement("Button"), {
         Size     = UDim2.new(0.5, 0, 1, 0),
-        Position = UDim2.new(0.5, 0, 0, 0),
-        Name     = "CloseBtn",
-        ZIndex   = 6,
-        Active   = true
+        Position = UDim2.new(0.5, 0, 0, 0)
     }), {
         AddThemeObject(SetProps(MakeElement("Image", "rbxassetid://7072725342"), {
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position    = UDim2.new(0.5, 0, 0.5, 0),
-            Size        = UDim2.new(0, 18, 0, 18),
-            ZIndex      = 7,
-            Name        = "Ico"
+            Size        = UDim2.new(0, 18, 0, 18)
         }), "Text")
     })
 
     local MinimizeBtn = SetChildren(SetProps(MakeElement("Button"), {
-        Size   = UDim2.new(0.5, 0, 1, 0),
-        Name   = "MinimizeBtn",
-        ZIndex = 6,
-        Active = true
+        Size = UDim2.new(0.5, 0, 1, 0)
     }), {
         AddThemeObject(SetProps(MakeElement("Image", "rbxassetid://7072719338"), {
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position    = UDim2.new(0.5, 0, 0.5, 0),
             Size        = UDim2.new(0, 18, 0, 18),
-            Name        = "Ico",
-            ZIndex      = 7
+            Name        = "Ico"
         }), "Text")
     })
 
     local DragPoint = SetProps(MakeElement("TFrame"), {
-        Size   = UDim2.new(1, 0, 0, 36),
-        ZIndex = 1
+        Size = UDim2.new(1, 0, 0, 36)
     })
 
     local ThumbImage = SetProps(MakeElement("Image",
@@ -1227,9 +1210,6 @@ function OrionLib:MakeWindow(WindowConfig)
     }), "Main")
 
     MainWindow.Active = true
-    MainWindow.TopBar.ZIndex = 5
-    MainWindow.TopBar.Active = true
-    WindowName.ZIndex = 7
 
     local SearchOpen = false
 
@@ -1251,7 +1231,6 @@ function OrionLib:MakeWindow(WindowConfig)
         Name                   = "SearchInput",
         Parent                 = MainWindow.TopBar
     })
-    SearchInput.ZIndex = 8
 
     local Acolor = OrionLib.Themes[OrionLib.SelectedTheme].Accent
 
@@ -1391,8 +1370,6 @@ function OrionLib:MakeWindow(WindowConfig)
     resizebtt.AnchorPoint      = Vector2.new(0.1, 0.1)
     resizebtt.BackgroundTransparency = 1
     resizebtt.ClipsDescendants = false
-    resizebtt.Active           = true
-    resizebtt.ZIndex           = 9
 
     local UICorner = Instance.new("UICorner")
     UICorner.CornerRadius = UDim.new(0.5, 0)
@@ -1406,16 +1383,14 @@ function OrionLib:MakeWindow(WindowConfig)
     ResizeIco.Image            = "rbxassetid://153287173"
     ResizeIco.ImageTransparency = 0.3
     ResizeIco.Parent           = resizebtt
-    ResizeIco.ZIndex           = 10
 
     local drgg    = false
     local mspos   = nil
     local nresize = 0
     local default = UDim2.new(0, 615, 0, 344)
-    local resizePointer = nil
 
     AddConnection(resizebtt.InputBegan, function(input)
-        if IsPrimaryPress(input) then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
             local cctime = tick()
 
             if cctime - nresize <= 0.5 then
@@ -1423,11 +1398,9 @@ function OrionLib:MakeWindow(WindowConfig)
                     Size = default
                 }):Play()
                 drgg = false
-                resizePointer = nil
             else
-                drgg          = true
-                resizePointer = input
-                mspos         = input.Position
+                drgg  = true
+                mspos = input.Position
             end
 
             nresize = cctime
@@ -1435,7 +1408,7 @@ function OrionLib:MakeWindow(WindowConfig)
     end)
 
     AddConnection(vgs.UIS.InputChanged, function(input)
-        if drgg and input == resizePointer and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        if drgg and input.UserInputType == Enum.UserInputType.MouseMovement then
             local delta = input.Position - mspos
             mspos = input.Position
             MainWindow.Size = UDim2.new(
@@ -1446,9 +1419,8 @@ function OrionLib:MakeWindow(WindowConfig)
     end)
 
     AddConnection(vgs.UIS.InputEnded, function(input)
-        if input == resizePointer or IsPrimaryPress(input) then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
             drgg = false
-            resizePointer = nil
         end
     end)
 
@@ -1509,7 +1481,6 @@ function OrionLib:MakeWindow(WindowConfig)
             }), "Accent")
         end
         WindowIcon.Parent = MainWindow.TopBar
-        WindowIcon.ZIndex = 8
 
         local bclse = Csearch
         Csearch = function()
@@ -1525,7 +1496,7 @@ function OrionLib:MakeWindow(WindowConfig)
         end
 
         AddConnection(WindowIcon.InputBegan, function(input)
-            if not IsPrimaryPress(input) then return end
+            if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
             if minimized then return end
 
             if iconSearchOpen then
@@ -1567,7 +1538,7 @@ function OrionLib:MakeWindow(WindowConfig)
         end)
 
         AddConnection(WindowIcon.InputEnded, function(input)
-            if not IsPrimaryPress(input) then return end
+            if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
             if not iconha then return end
             iconha    = false
             nmpg.Size = UDim2.new(0, 0, 0, 2)
@@ -1578,17 +1549,6 @@ function OrionLib:MakeWindow(WindowConfig)
                 vgs.TS:Create(WindowIcon, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
                     Rotation = 0
                 }):Play()
-            end
-        end)
-
-        AddConnection(WindowIcon.Activated, function()
-            if not vgs.UIS.TouchEnabled then return end
-            if minimized then return end
-            if WindowConfig.SearchBar == false then return end
-            if SearchOpen or iconSearchOpen then
-                Csearch()
-            else
-                Osearch()
             end
         end)
     end
@@ -1633,10 +1593,8 @@ function OrionLib:MakeWindow(WindowConfig)
     })
 
 	nclc = SetProps(MakeElement("Button"), {
-		ZIndex = 8, Parent = MainWindow.TopBar, Active = true
+		ZIndex = 3, Parent = MainWindow.TopBar
 	})
-
-    nmebox.ZIndex = 8
 
 	local function syncsyz()
 		local pos  = WindowName.Position
@@ -1683,7 +1641,7 @@ function OrionLib:MakeWindow(WindowConfig)
 	local Hcpl = false
 
 	AddConnection(nclc.InputBegan, function(input)
-		if not IsPrimaryPress(input) then return end
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
 		if minimized then return end
 		if iconha then
 			iconha = false
@@ -1710,7 +1668,7 @@ function OrionLib:MakeWindow(WindowConfig)
 	end)
 
 	AddConnection(nclc.InputEnded, function(input)
-		if not IsPrimaryPress(input) then return end
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
 		if Hcpl then Hcpl = false; return end
 		ha = false
 		nmpg.Size = UDim2.new(0,0,0,2)
@@ -1727,15 +1685,7 @@ function OrionLib:MakeWindow(WindowConfig)
 			vgs.TS:Create(WindowName, TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 				{Position = UDim2.new(baseS, baseX, 0, 0)}):Play()
 		end)
-    end)
-
-    AddConnection(nclc.Activated, function()
-        if not vgs.UIS.TouchEnabled then return end
-        if minimized then return end
-        if not nedit then
-            Onme()
-        end
-    end)
+	end)
 
 	AddConnection(nmebox.FocusLost, function()
 		CNe(true)
@@ -1754,14 +1704,6 @@ function OrionLib:MakeWindow(WindowConfig)
 		if WindowConfig.FreeMouse then UnlockMouse(false) end
 		WindowConfig.CloseCallback()
 	end)
-
-    AddConnection(CloseBtn.Activated, function()
-        if not vgs.UIS.TouchEnabled then return end
-        MainWindow.Visible = false
-        UIHidden = true
-        if WindowConfig.FreeMouse then UnlockMouse(false) end
-        WindowConfig.CloseCallback()
-    end)
 
 	AddConnection(vgs.UIS.InputBegan, function(Input, Focus)
 		if not Focus then
@@ -1798,7 +1740,7 @@ function OrionLib:MakeWindow(WindowConfig)
 
 	AddConnection(WindowName:GetPropertyChangedSignal("TextBounds"), updminframe)
 
-	local function ToggleMinimize()
+	AddConnection(MinimizeBtn.MouseButton1Click, function()
 		if reztween then reztween:Cancel(); reztween = nil end
 		if mintween then mintween:Cancel(); mintween = nil end
 		minimized = not minimized
@@ -1835,14 +1777,7 @@ function OrionLib:MakeWindow(WindowConfig)
 			end)
 			mintween.Completed:Wait()
 		end
-	end
-
-	AddConnection(MinimizeBtn.MouseButton1Click, ToggleMinimize)
-
-    AddConnection(MinimizeBtn.Activated, function()
-        if not vgs.UIS.TouchEnabled then return end
-        ToggleMinimize()
-    end)
+	end)
 
 	local function LoadSequence()
 		MainWindow.Visible = false
@@ -4051,9 +3986,8 @@ function OrionLib:MakeWindow(WindowConfig)
 				Relem(_tabName, ColorpickerConfig.Name, ColorpickerFrame)
 			
 				local ColorInput, HueInput
-                local ActiveColorPointer, ActiveHuePointer
 			
-				local function ToggleColorpicker()
+				AddConnection(Click.MouseButton1Click, function()
 					Colorpicker.Toggled = not Colorpicker.Toggled
 					vgs.TS:Create(ColorpickerFrame, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {
 						Size = Colorpicker.Toggled and UDim2.new(1, 0, 0, 148) or UDim2.new(1, 0, 0, 38)
@@ -4061,14 +3995,7 @@ function OrionLib:MakeWindow(WindowConfig)
 					Color.Visible = Colorpicker.Toggled
 					Hue.Visible = Colorpicker.Toggled
 					ColorpickerFrame.F.Line.Visible = Colorpicker.Toggled
-				end
-
-				AddConnection(Click.MouseButton1Click, ToggleColorpicker)
-                AddConnection(Click.Activated, function()
-                    if vgs.UIS.TouchEnabled then
-                        ToggleColorpicker()
-                    end
-                end)
+				end)
 			
 				local function UpdateColorPicker()
 					ColorpickerBox.BackgroundColor3 = Color3.fromHSV(ColorH, ColorS, ColorV)
@@ -4080,38 +4007,8 @@ function OrionLib:MakeWindow(WindowConfig)
 					if ColorpickerConfig.Save then SaveCfg(game.GameId) end
 				end
 			
-                local function PointerPos(pointer)
-                    if pointer and pointer.Position then
-                        return pointer.Position
-                    end
-                    return Vector2.new(vgs.MS.X, vgs.MS.Y)
-                end
-
-                local function StopColorInput()
-                    if ColorInput then
-                        if ColorpickerConfig.Mode == 2 then
-                            ColorpickerConfig.Callback(Colorpicker.Value)
-                        end
-                        ColorInput:Disconnect()
-                        ColorInput = nil
-                    end
-                    ActiveColorPointer = nil
-                end
-
-                local function StopHueInput()
-                    if HueInput then
-                        if ColorpickerConfig.Mode == 2 then
-                            ColorpickerConfig.Callback(Colorpicker.Value)
-                        end
-                        HueInput:Disconnect()
-                        HueInput = nil
-                    end
-                    ActiveHuePointer = nil
-                end
-
 				AddConnection(Color.InputBegan, function(input)
-					if IsPrimaryPress(input) then
-                        ActiveColorPointer = input
+					if input.UserInputType == Enum.UserInputType.MouseButton1 then
 						if ColorInput then ColorInput:Disconnect() end
 						ColorInput = AddConnection(vgs.RS.Heartbeat, function(dt)
 							acc += dt
@@ -4120,11 +4017,10 @@ function OrionLib:MakeWindow(WindowConfig)
 							end
 							acc -= rate
 						
-                            local pos = PointerPos(ActiveColorPointer)
 							local ax, ay = Color.AbsolutePosition.X, Color.AbsolutePosition.Y
 							local aw, ah = Color.AbsoluteSize.X, Color.AbsoluteSize.Y
-							local x = math.clamp(pos.X - ax, 0, aw) / aw
-							local y = math.clamp(pos.Y - ay, 0, ah) / ah
+							local x = math.clamp(vgs.MS.X - ax, 0, aw) / aw
+							local y = math.clamp(vgs.MS.Y - ay, 0, ah) / ah
 						
 							ColorSelection.Position = UDim2.new(x, 0, y, 0)
 							ColorS, ColorV = x, 1 - y
@@ -4134,14 +4030,17 @@ function OrionLib:MakeWindow(WindowConfig)
 				end)
 			
 				AddConnection(Color.InputEnded, function(input)
-					if input == ActiveColorPointer or IsPrimaryPress(input) then
-                        StopColorInput()
+					if input.UserInputType == Enum.UserInputType.MouseButton1 and ColorInput then
+						if ColorpickerConfig.Mode == 2 then
+							ColorpickerConfig.Callback(Colorpicker.Value)
+						end
+						ColorInput:Disconnect()
+						ColorInput = nil
 					end
 				end)
 			
 				AddConnection(Hue.InputBegan, function(input)
-					if IsPrimaryPress(input) then
-                        ActiveHuePointer = input
+					if input.UserInputType == Enum.UserInputType.MouseButton1 then
 						if HueInput then HueInput:Disconnect() end
 						HueInput = AddConnection(vgs.RS.Heartbeat, function(dt)
 							acc += dt
@@ -4149,9 +4048,8 @@ function OrionLib:MakeWindow(WindowConfig)
 								return
 							end
 							acc -= rate
-                            local pos = PointerPos(ActiveHuePointer)
 							local ay, ah = Hue.AbsolutePosition.Y, Hue.AbsoluteSize.Y
-							local y = math.clamp(pos.Y - ay, 0, ah) / ah
+							local y = math.clamp(vgs.MS.Y - ay, 0, ah) / ah
 							HueSelection.Position = UDim2.new(0.5, 0, y, 0)
 							ColorH = 1 - y
 							UpdateColorPicker()
@@ -4160,19 +4058,14 @@ function OrionLib:MakeWindow(WindowConfig)
 				end)
 			
 				AddConnection(Hue.InputEnded, function(input)
-					if input == ActiveHuePointer or IsPrimaryPress(input) then
-                        StopHueInput()
+					if input.UserInputType == Enum.UserInputType.MouseButton1 and HueInput then
+						if ColorpickerConfig.Mode == 2 then
+							ColorpickerConfig.Callback(Colorpicker.Value)
+						end
+						HueInput:Disconnect()
+						HueInput = nil
 					end
 				end)
-
-                AddConnection(vgs.UIS.InputEnded, function(input)
-                    if input == ActiveColorPointer then
-                        StopColorInput()
-                    end
-                    if input == ActiveHuePointer then
-                        StopHueInput()
-                    end
-                end)
 			
 				function Colorpicker:Set(Value)
 					Colorpicker.Value = Value
@@ -4213,12 +4106,11 @@ function OrionLib:MakeWindow(WindowConfig)
 			function ElementFunction:AddSmartTheme()
 				local gersec = self
 				
-				local basePicker = gersec:AddColorpicker({
+				
+				gersec:AddColorpicker({
 					Name = "Base Color",
 					Default = OrionLib.Themes[OrionLib.SelectedTheme].Main,
 					Mode = 2,
-                    Save = true,
-                    Flag = "__orion_theme_main",
 					Callback = function(Value)
 						local newTheme = OrionLib:GenTheme(Value)
 						OrionLib.Themes.Custom = newTheme
@@ -4231,13 +4123,10 @@ function OrionLib:MakeWindow(WindowConfig)
 					Name = "Reset Theme",
 					Callback = function()
 						OrionLib.SelectedTheme = "Default"
-                        if basePicker then
-                            basePicker:Set(OrionLib.Themes.Default.Main)
-                        end
 						OrionLib:SetTheme()
-                        SaveCfg(game.GameId)
 					end
 				})
+				OrionLib.SelectedTheme = "Default"
 				OrionLib:SetTheme()
 			end
 
