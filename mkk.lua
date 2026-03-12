@@ -1687,8 +1687,8 @@ function OrionLib:MakeWindow(WindowConfig)
             local cctime2  = tick()
             local timediff = cctime2 - lctime
 
-            if timediff <= dctime and minimized then
-                if IsMouseInput(input) and mouse1release then
+            if timediff <= dctime and minimized and IsMouseInput(input) then
+                if mouse1release then
                     mouse1release()
                 end
                 local screenSize = workspace.CurrentCamera.ViewportSize
