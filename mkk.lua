@@ -1584,7 +1584,9 @@ function OrionLib:MakeWindow(WindowConfig)
             local timediff = cctime2 - lctime
 
             if timediff <= dctime and minimized then
-                mouse1release()
+                if IsMouseInput(input) and mouse1release then
+                    mouse1release()
+                end
                 local screenSize = workspace.CurrentCamera.ViewportSize
                 local windowSize = MainWindow.AbsoluteSize
                 local xPos       = (screenSize.X - windowSize.X) / 2
