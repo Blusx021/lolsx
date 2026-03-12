@@ -180,6 +180,44 @@ local function ConnectPress(button, callback)
     end)
 end
 
+local function MakeFloatingDraggable(dragObject)
+    local dragging = false
+    local dragInput = nil
+    local dragStart = nil
+    local startPosition = nil
+
+    AddConnection(dragObject.InputBegan, function(input)
+        if not IsPrimaryPointerInput(input) then return end
+        dragging = true
+        dragInput = input
+        dragStart = input.Position
+        startPosition = dragObject.Position
+    end)
+
+    AddConnection(vgs.UIS.InputChanged, function(input)
+        if not dragging then return end
+        if not IsPointerMoveInput(input) then return end
+        if not IsMatchingDragInput(dragInput, input) then return end
+
+        local delta = input.Position - dragStart
+        local camera = workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize or Vector2.new(1920, 1080)
+        local size = dragObject.AbsoluteSize
+        local nextX = math.clamp(startPosition.X.Offset + delta.X, 8, math.max(8, viewport.X - size.X - 8))
+        local nextY = math.clamp(startPosition.Y.Offset + delta.Y, 8, math.max(8, viewport.Y - size.Y - 8))
+
+        dragObject.Position = UDim2.new(0, nextX, 0, nextY)
+    end)
+
+    AddConnection(vgs.UIS.InputEnded, function(input)
+        if not dragging then return end
+        if input == dragInput or (IsMouseInput(dragInput) and IsMouseInput(input)) then
+            dragging = false
+            dragInput = nil
+        end
+    end)
+end
+
 local function Clamp01(value)
     return math.clamp(value, 0, 1)
 end
@@ -379,7 +417,25 @@ end
 
 function LoadCfg(Config)
     local Data = vgs.HS:JSONDecode(Config)
+    local ThemeData = Data.__orion_theme
+
+    if type(ThemeData) == "table" then
+        if ThemeData.selected == "Custom" and type(ThemeData.main) == "table" then
+            OrionLib.Themes.Custom = OrionLib:GenTheme(UnpackColor(ThemeData.main))
+            OrionLib.SelectedTheme = "Custom"
+        elseif type(ThemeData.selected) == "string" and OrionLib.Themes[ThemeData.selected] then
+            OrionLib.SelectedTheme = ThemeData.selected
+        end
+
+        if OrionLib.SetTheme then
+            OrionLib:SetTheme()
+        end
+    end
+
     for a, b in pairs(Data) do
+        if a == "__orion_theme" then
+            continue
+        end
         if OrionLib.Flags[a] then
             task.spawn(function()
                 if OrionLib.Flags[a].Type == "Colorpicker" then
@@ -409,6 +465,15 @@ function SaveCfg(Name)
             end
         end
     end
+
+    Data.__orion_theme = {
+        selected = OrionLib.SelectedTheme
+    }
+
+    if OrionLib.SelectedTheme == "Custom" and OrionLib.Themes.Custom and OrionLib.Themes.Custom.Main then
+        Data.__orion_theme.main = PackColor(OrionLib.Themes.Custom.Main)
+    end
+
     if writefile then
         writefile(OrionLib.Folder .. "/" .. Name .. ".txt", tostring(vgs.HS:JSONEncode(Data)))
     end
@@ -1790,8 +1855,8 @@ function OrionLib:MakeWindow(WindowConfig)
 
 	local ReopenBtn = AddThemeObject(SetChildren(SetProps(MakeElement("RoundFrame", Color3.fromRGB(255, 255, 255), 1, 0), {
 		Parent = Orion,
-		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -18, 1, -18),
+		AnchorPoint = Vector2.new(0, 0),
+		Position = UDim2.new(0, 18, 1, -64),
 		Size = UDim2.new(0, 46, 0, 46),
 		Visible = false,
 		ZIndex = 25
@@ -1810,10 +1875,12 @@ function OrionLib:MakeWindow(WindowConfig)
 		}), "Text")
 	}), "Second")
 
+	MakeFloatingDraggable(ReopenBtn)
+
 	local function HideWindow()
 		MainWindow.Visible = false
 		UIHidden = true
-		ReopenBtn.Visible = true
+		ReopenBtn.Visible = vgs.UIS.TouchEnabled
 		if WindowConfig.FreeMouse then UnlockMouse(false) end
 		WindowConfig.CloseCallback()
 	end
@@ -4303,6 +4370,9 @@ function OrionLib:MakeWindow(WindowConfig)
 						OrionLib.Themes.Custom = newTheme
 						OrionLib.SelectedTheme = "Custom"
 						OrionLib:SetTheme()
+						if OrionLib.SaveCfg then
+							SaveCfg(game.GameId)
+						end
 					end
 				})
 				
@@ -4311,9 +4381,11 @@ function OrionLib:MakeWindow(WindowConfig)
 					Callback = function()
 						OrionLib.SelectedTheme = "Default"
 						OrionLib:SetTheme()
+						if OrionLib.SaveCfg then
+							SaveCfg(game.GameId)
+						end
 					end
 				})
-				OrionLib.SelectedTheme = "Default"
 				OrionLib:SetTheme()
 			end
 
