@@ -171,22 +171,93 @@ local function IsMatchingDragInput(originInput, changedInput)
     return false
 end
 
+local function GetViewportSize()
+    local camera = workspace.CurrentCamera
+    return camera and camera.ViewportSize or Vector2.new(1920, 1080)
+end
+
+local function ClampOffsetPosition(position, size, padding)
+    padding = padding or 8
+
+    return UDim2.new(
+        0,
+        math.clamp(position.X.Offset, padding, math.max(padding, GetViewportSize().X - size.X - padding)),
+        0,
+        math.clamp(position.Y.Offset, padding, math.max(padding, GetViewportSize().Y - size.Y - padding))
+    )
+end
+
+local function GetClampedGuiPosition(guiObject, fallbackPosition)
+    local position = fallbackPosition or guiObject.Position
+    local size = guiObject.AbsoluteSize
+
+    if size.X <= 0 or size.Y <= 0 then
+        local resolvedSize = guiObject.Size
+        size = Vector2.new(
+            resolvedSize.X.Offset > 0 and resolvedSize.X.Offset or 46,
+            resolvedSize.Y.Offset > 0 and resolvedSize.Y.Offset or 46
+        )
+    end
+
+    return ClampOffsetPosition(position, size)
+end
+
 local function ConnectPress(button, callback)
-    AddConnection(button.MouseButton1Click, callback)
-    AddConnection(button.InputEnded, function(input)
+    local activeTouch = nil
+    local touchStartPosition = nil
+    local touchMoved = false
+    local lastTouchPress = 0
+    local dragThreshold = 8
+
+    AddConnection(button.InputBegan, function(input)
         if IsTouchInput(input) then
-            callback()
+            activeTouch = input
+            touchStartPosition = input.Position
+            touchMoved = false
         end
+    end)
+
+    AddConnection(vgs.UIS.InputChanged, function(input)
+        if not activeTouch or input ~= activeTouch or not touchStartPosition then
+            return
+        end
+
+        if (input.Position - touchStartPosition).Magnitude >= dragThreshold then
+            touchMoved = true
+        end
+    end)
+
+    AddConnection(button.InputEnded, function(input)
+        if IsTouchInput(input) and (input == activeTouch or activeTouch == nil) then
+            local shouldTrigger = not touchMoved
+            activeTouch = nil
+            touchStartPosition = nil
+            touchMoved = false
+            lastTouchPress = tick()
+            if shouldTrigger then
+                callback()
+            end
+        end
+    end)
+
+    AddConnection(button.MouseButton1Click, function()
+        if tick() - lastTouchPress < 0.25 then
+            return
+        end
+        callback()
     end)
 end
 
-local function MakeFloatingDraggable(dragObject)
+local function MakeFloatingDraggable(dragHandle, dragObject)
+    dragObject = dragObject or dragHandle
+
     local dragging = false
     local dragInput = nil
     local dragStart = nil
     local startPosition = nil
+    local dragThreshold = 6
 
-    AddConnection(dragObject.InputBegan, function(input)
+    AddConnection(dragHandle.InputBegan, function(input)
         if not IsPrimaryPointerInput(input) then return end
         dragging = true
         dragInput = input
@@ -200,13 +271,14 @@ local function MakeFloatingDraggable(dragObject)
         if not IsMatchingDragInput(dragInput, input) then return end
 
         local delta = input.Position - dragStart
-        local camera = workspace.CurrentCamera
-        local viewport = camera and camera.ViewportSize or Vector2.new(1920, 1080)
-        local size = dragObject.AbsoluteSize
-        local nextX = math.clamp(startPosition.X.Offset + delta.X, 8, math.max(8, viewport.X - size.X - 8))
-        local nextY = math.clamp(startPosition.Y.Offset + delta.Y, 8, math.max(8, viewport.Y - size.Y - 8))
+        if delta.Magnitude < dragThreshold then return end
 
-        dragObject.Position = UDim2.new(0, nextX, 0, nextY)
+        dragObject.Position = ClampOffsetPosition(UDim2.new(
+            0,
+            startPosition.X.Offset + delta.X,
+            0,
+            startPosition.Y.Offset + delta.Y
+        ), dragObject.AbsoluteSize)
     end)
 
     AddConnection(vgs.UIS.InputEnded, function(input)
@@ -254,40 +326,35 @@ end
 function MakeDraggable(DragPoint, Main)
     pcall(function()
         local Dragging, DragInput, PointerPos, FramePos = false
+        local dragThreshold = 6
 
         AddConnection(DragPoint.InputBegan, function(Input)
             if IsPrimaryPointerInput(Input) then
                 Dragging  = true
                 DragInput = Input
-                PointerPos  = Input.Position
-                FramePos  = Main.Position
+                PointerPos = Input.Position
+                FramePos = Main.Position
             end
         end)
 
         AddConnection(vgs.UIS.InputEnded, function(Input)
-            if DragInput == Input or IsPrimaryPointerInput(Input) then
+            if DragInput and (Input == DragInput or (IsMouseInput(DragInput) and IsMouseInput(Input))) then
                 Dragging = false
                 DragInput = nil
             end
         end)
 
-        AddConnection(DragPoint.InputChanged, function(Input)
-            if IsPointerMoveInput(Input) then
-                DragInput = Input
-            end
-        end)
-
         AddConnection(vgs.UIS.InputChanged, function(Input)
-            if Input == DragInput and Dragging then
+            if Dragging and IsPointerMoveInput(Input) and IsMatchingDragInput(DragInput, Input) then
                 local Delta = Input.Position - PointerPos
-                vgs.TS:Create(Main, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                    Position = UDim2.new(
-                        FramePos.X.Scale,
-                        FramePos.X.Offset + Delta.X,
-                        FramePos.Y.Scale,
-                        FramePos.Y.Offset + Delta.Y
-                    )
-                }):Play()
+                if Delta.Magnitude < dragThreshold then return end
+
+                Main.Position = ClampOffsetPosition(UDim2.new(
+                    0,
+                    FramePos.X.Offset + Delta.X,
+                    0,
+                    FramePos.Y.Offset + Delta.Y
+                ), Main.AbsoluteSize)
             end
         end)
     end)
@@ -933,29 +1000,36 @@ function OrionLib:MakeWindow(WindowConfig)
     end)
 
     local CloseBtn = SetChildren(SetProps(MakeElement("Button"), {
-        Size     = UDim2.new(0.5, 0, 1, 0),
-        Position = UDim2.new(0.5, 0, 0, 0)
+        Size     = UDim2.new(0.5, -2, 1, 0),
+        Position = UDim2.new(0.5, 2, 0, 0),
+        ZIndex   = 4
     }), {
         AddThemeObject(SetProps(MakeElement("Image", "rbxassetid://7072725342"), {
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position    = UDim2.new(0.5, 0, 0.5, 0),
-            Size        = UDim2.new(0, 18, 0, 18)
+            Size        = UDim2.new(0, 18, 0, 18),
+            ZIndex      = 5
         }), "Text")
     })
 
     local MinimizeBtn = SetChildren(SetProps(MakeElement("Button"), {
-        Size = UDim2.new(0.5, 0, 1, 0)
+        Size = UDim2.new(0.5, -2, 1, 0),
+        ZIndex = 4
     }), {
         AddThemeObject(SetProps(MakeElement("Image", "rbxassetid://7072719338"), {
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position    = UDim2.new(0.5, 0, 0.5, 0),
             Size        = UDim2.new(0, 18, 0, 18),
-            Name        = "Ico"
+            Name        = "Ico",
+            ZIndex      = 5
         }), "Text")
     })
 
     local DragPoint = SetProps(MakeElement("TFrame"), {
-        Size = UDim2.new(1, 0, 0, 36)
+        Size = UDim2.new(1, -84, 0, 36),
+        Position = UDim2.new(0, 0, 0, 0),
+        Active = true,
+        ZIndex = 1
     })
 
     local ThumbImage = SetProps(MakeElement("Image",
@@ -1332,8 +1406,9 @@ function OrionLib:MakeWindow(WindowConfig)
         }), {
             WindowName,
             SetChildren(SetProps(MakeElement("TFrame"), {
-                Size     = UDim2.new(0, 52, 0, 30),
-                Position = UDim2.new(1, -58, 0, 3)
+                Size     = UDim2.new(0, 72, 0, 36),
+                Position = UDim2.new(1, -76, 0, 0),
+                ZIndex   = 4
             }), {
                 CloseBtn,
                 MinimizeBtn
@@ -1517,7 +1592,7 @@ function OrionLib:MakeWindow(WindowConfig)
     resizebtt.Position         = UDim2.new(1, -19, 1, -19)
     resizebtt.BorderSizePixel  = 0
     resizebtt.Parent           = MainWindow
-    resizebtt.Visible          = true
+    resizebtt.Visible          = not vgs.UIS.TouchEnabled
     resizebtt.AnchorPoint      = Vector2.new(0.1, 0.1)
     resizebtt.BackgroundTransparency = 1
     resizebtt.ClipsDescendants = false
@@ -1542,7 +1617,7 @@ function OrionLib:MakeWindow(WindowConfig)
     local resizeInput = nil
 
     AddConnection(resizebtt.InputBegan, function(input)
-        if IsPrimaryPointerInput(input) then
+        if IsMouseInput(input) then
             local cctime = tick()
 
             if cctime - nresize <= 0.5 then
@@ -1587,7 +1662,9 @@ function OrionLib:MakeWindow(WindowConfig)
             local timediff = cctime2 - lctime
 
             if timediff <= dctime and minimized then
-                mouse1release()
+                if IsMouseInput(input) and mouse1release then
+                    mouse1release()
+                end
                 local screenSize = workspace.CurrentCamera.ViewportSize
                 local windowSize = MainWindow.AbsoluteSize
                 local xPos       = (screenSize.X - windowSize.X) / 2
@@ -1708,7 +1785,7 @@ function OrionLib:MakeWindow(WindowConfig)
     end
 
     ContentPanel:GetPropertyChangedSignal("Visible"):Connect(function()
-        resizebtt.Visible = ContentPanel.Visible
+        resizebtt.Visible = ContentPanel.Visible and not vgs.UIS.TouchEnabled
     end)
 
     nmpg = Create("Frame", {
@@ -1856,16 +1933,18 @@ function OrionLib:MakeWindow(WindowConfig)
 	local ReopenBtn = AddThemeObject(SetChildren(SetProps(MakeElement("RoundFrame", Color3.fromRGB(255, 255, 255), 1, 0), {
 		Parent = Orion,
 		AnchorPoint = Vector2.new(0, 0),
-		Position = UDim2.new(0, 18, 1, -64),
+		Position = UDim2.new(0, 18, 0, 18),
 		Size = UDim2.new(0, 46, 0, 46),
 		Visible = false,
-		ZIndex = 25
+		ZIndex = 25,
+		Active = true
 	}), {
 		AddThemeObject(MakeElement("Stroke"), "Stroke"),
 		SetProps(MakeElement("Button"), {
 			Size = UDim2.new(1, 0, 1, 0),
 			ZIndex = 26,
-			Name = "Hitbox"
+			Name = "Hitbox",
+			Active = true
 		}),
 		AddThemeObject(SetProps(MakeElement("Image", "rbxassetid://7072719338"), {
 			AnchorPoint = Vector2.new(0.5, 0.5),
@@ -1875,17 +1954,24 @@ function OrionLib:MakeWindow(WindowConfig)
 		}), "Text")
 	}), "Second")
 
-	MakeFloatingDraggable(ReopenBtn)
+	MakeFloatingDraggable(ReopenBtn.Hitbox, ReopenBtn)
 
 	local function HideWindow()
 		MainWindow.Visible = false
 		UIHidden = true
+		ReopenBtn.Position = GetClampedGuiPosition(ReopenBtn, UDim2.new(
+			0,
+			MainWindow.Position.X.Offset,
+			0,
+			MainWindow.Position.Y.Offset
+		))
 		ReopenBtn.Visible = vgs.UIS.TouchEnabled
 		if WindowConfig.FreeMouse then UnlockMouse(false) end
 		WindowConfig.CloseCallback()
 	end
 
 	local function ShowWindow()
+		MainWindow.Position = GetClampedGuiPosition(MainWindow, MainWindow.Position)
 		MainWindow.Visible = true
 		UIHidden = false
 		ReopenBtn.Visible = false
