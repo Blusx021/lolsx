@@ -8,7 +8,7 @@ local ippp     = u.IPPP
 local SICF     = u.SICF
 local FINF     = u.FINF
 local SPE      = u.SPE 
-local MBP      = u.MBP
+local MBP      = u.MBP  
 local wfc      = u.wfc
 local fps      = u.fps
 local FMC      = u.FMC
@@ -1614,7 +1614,7 @@ function hdlb(i)
         if not hp then return end
         local gr = p("HoldItemRemoteFunction", hp)
         local dr = p("DropItemRemoteFunction", hp)
-        if p("RigidConstraint", hp, 2).Attachment1 then 
+        if p("RigidConstraint", hp, 2).Attachment1 then
             repeat task.wait() until not p("RigidConstraint", hp).Attachment1 or i.Parent == nil
         end
         
@@ -2319,11 +2319,13 @@ end
 --//
 var("Valores").VRS = 2
 var("Toggle").pkl = false
-var("Valores").pklv = 500
+var("Valores").pklv = 800
 
 cm(var("RunS"), "RenderStepped", function()
     if var("Toggle").pkl then
-        var("Remotes").egl:FireServer(string.rep("𒐫𓂀𗀀𖤐𐕣𒀀𓆣𒐫𗃼𒐫𖨆𐘋", var("Valores").pklv))
+        for i = 1, 2 do
+            var("Remotes").egl:FireServer(string.rep("𒐫𓂀𗀀𖤐𐕣𒀀𓆣𒐫𗃼𒐫𖨆𐘋", var("Valores").pklv))
+        end
     end    
 end, {ref = var("Valores"), key = "VRS"}, "pkl")
 --//
@@ -2374,587 +2376,23 @@ end
 --sep                                                                  
 --# Orion Config
 
-local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/Blusx021/lolsx/refs/heads/main/mkk.lua')))()
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/Blusx021/lolsx/refs/heads/main/delirium.lua')))()
 OrionLib.UMouseMode = "ThirdPerson"
-local IsTouchDevice = var("UIS").TouchEnabled
-local OrionWindowIcon = "rbxassetid://114143041236784"
 
 local Window = OrionLib:MakeWindow({
     TagText = var("Toggle").Isowner and "Owner" or "User",
-    IntroIcon = OrionWindowIcon,
-    Icon = OrionWindowIcon,
+    IntroIcon = "rbxassetid://114143041236784",
+    Icon = "rbxassetid://114143041236784",
     IntroText = "Welcome to Fire Hub",
     IconColorChange = true,
     IntroEnabled = false,
     HidePremium = false,
     SaveConfig = false,
     Name = "Fire Hub",
-    FreeMouse = not IsTouchDevice,
+    FreeMouse = true,
     SearchBar = true,
     ShowIcon = true
 })
-
-local function EnableTouchBridge()
-    if not IsTouchDevice then
-        return
-    end
-
-    local function connect(signal, callback)
-        local connection = signal:Connect(callback)
-        var("Conns").orionMobile = var("Conns").orionMobile or {}
-        table.insert(var("Conns").orionMobile, connection)
-        return connection
-    end
-
-    local guiRoot = (gethui and gethui()) or game.CoreGui
-    local OrionGui
-    for _ = 1, 50 do
-        OrionGui = guiRoot:FindFirstChild("Orion") or guiRoot:FindFirstChild("OrionLib")
-        if OrionGui then
-            break
-        end
-        task.wait(0.1)
-    end
-    if not OrionGui then
-        return
-    end
-
-    pcall(function()
-        OrionGui.IgnoreGuiInset = true
-        OrionGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    end)
-
-    local function FindMainWindow()
-        for _, obj in ipairs(OrionGui:GetDescendants()) do
-            if obj:IsA("Frame") and obj:FindFirstChild("TopBar") then
-                return obj
-            end
-        end
-        return nil
-    end
-
-    local MainWindow
-    for _ = 1, 50 do
-        MainWindow = FindMainWindow()
-        if MainWindow then
-            break
-        end
-        task.wait(0.1)
-    end
-    if not MainWindow then
-        return
-    end
-
-    local TopBar = MainWindow:FindFirstChild("TopBar")
-    local TabStripFrame = MainWindow:FindFirstChild("TabStrip")
-    local ContentFrame = MainWindow:FindFirstChild("ContentPanel")
-    local DragSurface = TopBar
-    local WindowStuff
-    local WindowTopBarLine
-
-    for _, child in ipairs(MainWindow:GetChildren()) do
-        if child:IsA("Frame") then
-            if child.Name ~= "TopBar" and child.BackgroundTransparency == 1 and child.Size.Y.Offset == 50 then
-                DragSurface = child
-            elseif child.Name ~= "TopBar" and child:FindFirstChildWhichIsA("ScrollingFrame", true) then
-                WindowStuff = child
-            end
-        end
-    end
-
-    if TopBar then
-        for _, obj in ipairs(TopBar:GetChildren()) do
-            if obj:IsA("Frame") and obj.Size.Y.Offset == 1 then
-                WindowTopBarLine = obj
-                break
-            end
-        end
-    end
-
-    local function FindTopButtons()
-        if not TopBar then
-            return nil, nil
-        end
-
-        local buttons = {}
-        for _, obj in ipairs(TopBar:GetDescendants()) do
-            if obj:IsA("TextButton") then
-                table.insert(buttons, obj)
-            end
-        end
-
-        table.sort(buttons, function(a, b)
-            local aRight = a.AbsolutePosition.X + a.AbsoluteSize.X
-            local bRight = b.AbsolutePosition.X + b.AbsoluteSize.X
-            if aRight == bRight then
-                return a.AbsolutePosition.X < b.AbsolutePosition.X
-            end
-            return aRight > bRight
-        end)
-
-        local rightMost = buttons[1]
-        local secondRightMost = buttons[2]
-
-        if not rightMost or not secondRightMost then
-            return nil, nil
-        end
-
-        if rightMost.AbsolutePosition.X < secondRightMost.AbsolutePosition.X then
-            rightMost, secondRightMost = secondRightMost, rightMost
-        end
-
-        return secondRightMost, rightMost
-    end
-
-    local MinimizeBtn, CloseBtn = FindTopButtons()
-    local MinimizeIcon = TopBar and TopBar:FindFirstChild("Ico", true)
-    local LastWindowSize = MainWindow.Size
-    local LastVisibleChildren = {}
-    local LastVisibleContainers = {}
-
-    local function GetContainerHost()
-        return ContentFrame or MainWindow
-    end
-
-    local function GetTabContainers()
-        local containers = {}
-        for _, child in ipairs(GetContainerHost():GetChildren()) do
-            if child:IsA("ScrollingFrame") or (child:IsA("Frame") and child:FindFirstChild("Holder")) then
-                table.insert(containers, child)
-            end
-        end
-        return containers
-    end
-
-    local function CaptureWindowState()
-        LastWindowSize = MainWindow.Size
-        table.clear(LastVisibleChildren)
-        table.clear(LastVisibleContainers)
-
-        for _, child in ipairs(MainWindow:GetChildren()) do
-            if child:IsA("GuiObject") then
-                LastVisibleChildren[child] = child.Visible
-            end
-        end
-
-        for _, container in ipairs(GetTabContainers()) do
-            LastVisibleContainers[container] = container.Visible
-        end
-    end
-
-    CaptureWindowState()
-
-    local touchInput = nil
-    local touchCaptured = false
-    local hasShownWindow = MainWindow.Visible
-
-    local function IsInsideOrion(pos)
-        local ok, guiObjects = pcall(function()
-            return var("UIS"):GetGuiObjectsAtPosition(pos.X, pos.Y)
-        end)
-        if not ok then
-            return false
-        end
-
-        for _, guiObj in ipairs(guiObjects) do
-            if guiObj:IsDescendantOf(OrionGui) then
-                return true
-            end
-        end
-
-        return false
-    end
-
-    connect(var("UIS").InputBegan, function(input, gameProcessed)
-        if gameProcessed or input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
-        if touchCaptured then
-            return
-        end
-
-        local pos = Vector2.new(input.Position.X, input.Position.Y)
-        if not IsInsideOrion(pos) then
-            return
-        end
-
-        touchInput = input
-        touchCaptured = true
-        pcall(function()
-            var("VIM"):SendMouseMoveEvent(pos.X, pos.Y, game)
-        end)
-        pcall(function()
-            var("VIM"):SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 1)
-        end)
-    end)
-
-    connect(var("UIS").InputChanged, function(input)
-        if not touchCaptured or input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
-        if touchInput and input ~= touchInput then
-            return
-        end
-
-        local pos = Vector2.new(input.Position.X, input.Position.Y)
-        pcall(function()
-            var("VIM"):SendMouseMoveEvent(pos.X, pos.Y, game)
-        end)
-    end)
-
-    connect(var("UIS").InputEnded, function(input)
-        if not touchCaptured or input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
-        if touchInput and input ~= touchInput then
-            return
-        end
-
-        local pos = Vector2.new(input.Position.X, input.Position.Y)
-        pcall(function()
-            var("VIM"):SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 1)
-        end)
-
-        touchInput = nil
-        touchCaptured = false
-    end)
-
-    local nativeMobileButton = OrionGui:FindFirstChild("MobileOpenButton")
-    if nativeMobileButton and nativeMobileButton:FindFirstChild("Hitbox") then
-        local oldBridge = OrionGui:FindFirstChild("MobileOpenButtonBridge")
-        if oldBridge and oldBridge:IsA("GuiObject") then
-            oldBridge:Destroy()
-        end
-        return
-    end
-
-    local legacyBridge = nativeMobileButton
-    if legacyBridge and legacyBridge:IsA("ImageButton") and not legacyBridge:FindFirstChild("Hitbox") then
-        legacyBridge:Destroy()
-    end
-
-    local OpenBubble = OrionGui:FindFirstChild("MobileOpenButtonBridge")
-    if not OpenBubble then
-        OpenBubble = Instance.new("ImageButton")
-        OpenBubble.Name = "MobileOpenButtonBridge"
-        OpenBubble.Parent = OrionGui
-        OpenBubble.AnchorPoint = Vector2.new(1, 1)
-        OpenBubble.Position = UDim2.new(1, -18, 1, -120)
-        OpenBubble.Size = UDim2.new(0, 54, 0, 54)
-        OpenBubble.AutoButtonColor = false
-        OpenBubble.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
-        OpenBubble.BorderSizePixel = 0
-        OpenBubble.Image = OrionWindowIcon
-        OpenBubble.ImageColor3 = Color3.fromRGB(240, 240, 240)
-        OpenBubble.Visible = false
-        OpenBubble.ZIndex = 100
-
-        local BubbleCorner = Instance.new("UICorner")
-        BubbleCorner.CornerRadius = UDim.new(1, 0)
-        BubbleCorner.Parent = OpenBubble
-
-        local BubbleStroke = Instance.new("UIStroke")
-        BubbleStroke.Color = Color3.fromRGB(80, 80, 80)
-        BubbleStroke.Thickness = 1.2
-        BubbleStroke.Parent = OpenBubble
-    end
-
-    local bubbleDragging = false
-    local bubbleDragMoved = false
-    local bubbleDragInput = nil
-    local bubbleStartPos = nil
-    local bubbleOrigin = nil
-    local isRestoringWindow = false
-
-    local function IsPointerInput(input)
-        return input.UserInputType == Enum.UserInputType.Touch
-            or input.UserInputType == Enum.UserInputType.MouseButton1
-    end
-
-    local function IsCollapsedMinimizeState()
-        return MainWindow.Size.Y.Offset <= 60
-            or (WindowStuff and not WindowStuff.Visible)
-            or (TabStripFrame and not TabStripFrame.Visible)
-            or (ContentFrame and not ContentFrame.Visible)
-    end
-
-    local function RestoreWindow()
-        isRestoringWindow = true
-        local ok = pcall(function()
-            MainWindow.Visible = true
-            MainWindow.ClipsDescendants = false
-            MainWindow.Size = LastWindowSize or UDim2.new(0, 615, 0, 344)
-
-            local restoredContainer = false
-            for child, wasVisible in pairs(LastVisibleChildren) do
-                if child and child.Parent == MainWindow and child:IsA("GuiObject") then
-                    child.Visible = wasVisible
-                    if (child:IsA("ScrollingFrame") or (child:IsA("Frame") and child:FindFirstChild("Holder"))) and wasVisible then
-                        restoredContainer = true
-                    end
-                end
-            end
-
-            if WindowStuff then
-                WindowStuff.Visible = true
-            end
-            if TabStripFrame then
-                TabStripFrame.Visible = true
-            end
-            if ContentFrame then
-                ContentFrame.Visible = true
-            end
-            if WindowTopBarLine then
-                WindowTopBarLine.Visible = true
-            end
-            if MinimizeIcon then
-                MinimizeIcon.Image = "rbxassetid://7072719338"
-            end
-
-            for container, wasVisible in pairs(LastVisibleContainers) do
-                if container and container.Parent == GetContainerHost() then
-                    container.Visible = wasVisible
-                    restoredContainer = restoredContainer or wasVisible
-                end
-            end
-
-            if not restoredContainer then
-                local firstContainer = nil
-                for _, child in ipairs(GetTabContainers()) do
-                    firstContainer = firstContainer or child
-                    child.Visible = false
-                end
-                if firstContainer then
-                    firstContainer.Visible = true
-                end
-            end
-
-            CaptureWindowState()
-        end)
-        isRestoringWindow = false
-        if not ok then
-            OpenBubble.Visible = true
-        end
-    end
-
-    local function SyncBubbleVisibility()
-        if IsCollapsedMinimizeState() then
-            OpenBubble.Visible = false
-            return
-        end
-
-        if MainWindow.Visible then
-            hasShownWindow = true
-            if not isRestoringWindow then
-                CaptureWindowState()
-            end
-        end
-
-        OpenBubble.Visible = hasShownWindow and (not MainWindow.Visible) and not isRestoringWindow
-    end
-
-    local ResizeHandle = MainWindow:FindFirstChild("MobileResizeHandle")
-    if not ResizeHandle then
-        ResizeHandle = Instance.new("ImageButton")
-        ResizeHandle.Name = "MobileResizeHandle"
-        ResizeHandle.Parent = MainWindow
-        ResizeHandle.AnchorPoint = Vector2.new(1, 1)
-        ResizeHandle.Position = UDim2.new(1, -4, 1, -4)
-        ResizeHandle.Size = UDim2.new(0, 32, 0, 32)
-        ResizeHandle.BackgroundTransparency = 0.2
-        ResizeHandle.BorderSizePixel = 0
-        ResizeHandle.AutoButtonColor = false
-        ResizeHandle.Active = true
-        ResizeHandle.Selectable = true
-        ResizeHandle.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
-        ResizeHandle.Image = "rbxassetid://153287173"
-        ResizeHandle.ImageTransparency = 0.05
-        ResizeHandle.ZIndex = 200
-
-        local ResizeCorner = Instance.new("UICorner")
-        ResizeCorner.CornerRadius = UDim.new(0, 10)
-        ResizeCorner.Parent = ResizeHandle
-
-        local ResizeStroke = Instance.new("UIStroke")
-        ResizeStroke.Thickness = 1
-        ResizeStroke.Color = Color3.fromRGB(92, 92, 92)
-        ResizeStroke.Parent = ResizeHandle
-    end
-
-    connect(OpenBubble.InputBegan, function(input)
-        if not IsPointerInput(input) then
-            return
-        end
-        bubbleDragging = true
-        bubbleDragMoved = false
-        bubbleDragInput = input
-        bubbleStartPos = Vector2.new(input.Position.X, input.Position.Y)
-        bubbleOrigin = OpenBubble.Position
-    end)
-
-    connect(var("UIS").InputChanged, function(input)
-        if not bubbleDragging or not IsPointerInput(input) then
-            return
-        end
-        if bubbleDragInput and input ~= bubbleDragInput then
-            return
-        end
-        local pos = Vector2.new(input.Position.X, input.Position.Y)
-        local delta = pos - bubbleStartPos
-        bubbleDragMoved = bubbleDragMoved or delta.Magnitude > 6
-        OpenBubble.Position = UDim2.new(
-            bubbleOrigin.X.Scale,
-            bubbleOrigin.X.Offset + delta.X,
-            bubbleOrigin.Y.Scale,
-            bubbleOrigin.Y.Offset + delta.Y
-        )
-    end)
-
-    connect(var("UIS").InputEnded, function(input)
-        if not IsPointerInput(input) then
-            return
-        end
-        if bubbleDragInput and input ~= bubbleDragInput then
-            return
-        end
-        bubbleDragging = false
-        bubbleDragInput = nil
-    end)
-
-    if OpenBubble:IsA("GuiButton") then
-        connect(OpenBubble.Activated, function()
-            if bubbleDragMoved then
-                bubbleDragMoved = false
-                return
-            end
-
-            RestoreWindow()
-            SyncBubbleVisibility()
-        end)
-    end
-
-    connect(MainWindow:GetPropertyChangedSignal("Visible"), function()
-        if not MainWindow.Visible and IsCollapsedMinimizeState() and not isRestoringWindow then
-            task.defer(function()
-                if not MainWindow.Visible and IsCollapsedMinimizeState() and not isRestoringWindow then
-                    MainWindow.Visible = true
-                    ResizeHandle.Visible = true
-                    OpenBubble.Visible = false
-                end
-            end)
-        end
-        SyncBubbleVisibility()
-        ResizeHandle.Visible = MainWindow.Visible
-    end)
-
-    if WindowStuff then
-        connect(WindowStuff:GetPropertyChangedSignal("Visible"), function()
-            if isRestoringWindow then
-                return
-            end
-            SyncBubbleVisibility()
-        end)
-    end
-
-    if CloseBtn then
-        connect(CloseBtn.MouseButton1Up, function()
-            CaptureWindowState()
-            task.defer(SyncBubbleVisibility)
-        end)
-    end
-
-    if MinimizeBtn then
-        connect(MinimizeBtn.MouseButton1Up, function()
-            OpenBubble.Visible = false
-            task.defer(function()
-                if MainWindow.Visible or IsCollapsedMinimizeState() then
-                    OpenBubble.Visible = false
-                else
-                    SyncBubbleVisibility()
-                end
-            end)
-            task.delay(0.2, function()
-                if MainWindow.Visible or IsCollapsedMinimizeState() then
-                    OpenBubble.Visible = false
-                end
-            end)
-        end)
-    end
-
-    local draggingWindowInput = nil
-    local draggingWindowStart = nil
-    local draggingWindowOrigin = nil
-    local resizingInput = nil
-    local resizingStart = nil
-    local resizingSize = nil
-
-    connect(DragSurface.InputBegan, function(input)
-        if input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
-        draggingWindowInput = input
-        draggingWindowStart = Vector2.new(input.Position.X, input.Position.Y)
-        draggingWindowOrigin = MainWindow.Position
-    end)
-
-    connect(var("UIS").InputChanged, function(input)
-        if draggingWindowInput ~= input then
-            return
-        end
-
-        local pos = Vector2.new(input.Position.X, input.Position.Y)
-        local delta = pos - draggingWindowStart
-        MainWindow.Position = UDim2.new(
-            draggingWindowOrigin.X.Scale,
-            draggingWindowOrigin.X.Offset + delta.X,
-            draggingWindowOrigin.Y.Scale,
-            draggingWindowOrigin.Y.Offset + delta.Y
-        )
-    end)
-
-    connect(var("UIS").InputEnded, function(input)
-        if draggingWindowInput ~= input then
-            return
-        end
-        draggingWindowInput = nil
-        draggingWindowStart = nil
-        draggingWindowOrigin = nil
-    end)
-
-    connect(ResizeHandle.InputBegan, function(input)
-        if not IsPointerInput(input) or not MainWindow.Visible then
-            return
-        end
-        resizingInput = input
-        resizingStart = Vector2.new(input.Position.X, input.Position.Y)
-        resizingSize = MainWindow.Size
-    end)
-
-    connect(var("UIS").InputChanged, function(input)
-        if resizingInput ~= input or not resizingStart or not resizingSize then
-            return
-        end
-
-        local pos = Vector2.new(input.Position.X, input.Position.Y)
-        local delta = pos - resizingStart
-        local newWidth = math.max(415, resizingSize.X.Offset + delta.X)
-        local newHeight = math.max(307, resizingSize.Y.Offset + delta.Y)
-        MainWindow.Size = UDim2.new(0, newWidth, 0, newHeight)
-        LastWindowSize = MainWindow.Size
-    end)
-
-    connect(var("UIS").InputEnded, function(input)
-        if resizingInput ~= input then
-            return
-        end
-        resizingInput = nil
-        resizingStart = nil
-        resizingSize = nil
-        CaptureWindowState()
-    end)
-end
-
-task.defer(EnableTouchBridge)
 
 ---@diagnostic disable-next-line: undefined-global
 function notify(N, C, I, T)
@@ -3753,11 +3191,11 @@ Loop:AddToggle({
 
 Loop:AddTextbox({
     Name = "Packet Strings",
-    Default = "1000",
+    Default = "800",
     TextDisappear = false,
-    BackGrountText = "Default(1000)",
+    BackGrountText = "Default(800)",
     Callback = function(Value)
-        if Value and tonumber(Value) ~= nil and tonumber(Value) <= 1800 then
+        if Value and tonumber(Value) ~= nil and tonumber(Value) <= 1600 then
             var("Valores").pklv = Value
             if tonumber(Value) > 1000 then
                 print("A")
@@ -3765,7 +3203,7 @@ Loop:AddTextbox({
             end
         elseif Value ~= "" and tonumber(Value) == nil then
             notify("Note!", "Just Numbers Please")
-        elseif tonumber(Value) >= 1800 then
+        elseif tonumber(Value) >= 1600 then
             notify("Note!", "Number is too High")
         else
             var("Valores").pklv = 1000
@@ -4097,6 +3535,7 @@ Config:AddParagraph(
     "Version 1.9 -- Whitelist\nVersion 2 -- Alot..", "Center"
 )
 Config:AddSection("Version 2.1", "Right", 10)
+Config:AddSection("DISCONTINUED", "Right", 10)
 cm("plradded", "Add", UPDDrops)
 OrionLib:Init() 
 --! Creator :: firemax
