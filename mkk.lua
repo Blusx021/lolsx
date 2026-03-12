@@ -220,6 +220,30 @@ local function GetClampedGuiPosition(guiObject, fallbackPosition)
     return ClampOffsetPosition(position, size)
 end
 
+local function GetAbsoluteWindowPosition(guiObject)
+    local absolutePosition = guiObject.AbsolutePosition
+
+    if absolutePosition.X ~= 0 or absolutePosition.Y ~= 0 then
+        return UDim2.new(0, absolutePosition.X, 0, absolutePosition.Y)
+    end
+
+    local parent = guiObject.Parent
+    local parentSize
+
+    if parent and parent:IsA("GuiObject") then
+        parentSize = parent.AbsoluteSize
+    else
+        parentSize = GetViewportSize()
+    end
+
+    return UDim2.new(
+        0,
+        math.floor(parentSize.X * guiObject.Position.X.Scale + guiObject.Position.X.Offset + 0.5),
+        0,
+        math.floor(parentSize.Y * guiObject.Position.Y.Scale + guiObject.Position.Y.Offset + 0.5)
+    )
+end
+
 local function ConnectPress(button, callback)
     local activeTouch = nil
     local touchStartPosition = nil
@@ -362,7 +386,7 @@ function MakeDraggable(DragPoint, Main)
                 Dragging  = true
                 DragInput = Input
                 PointerPos = Input.Position
-                FramePos = Main.Position
+                FramePos = GetAbsoluteWindowPosition(Main)
             end
         end)
 
@@ -1462,6 +1486,7 @@ function OrionLib:MakeWindow(WindowConfig)
     }), "Main")
 
     MainWindow.Active = true
+    MainWindow.Position = GetAbsoluteWindowPosition(MainWindow)
 
     local SearchOpen = false
 
@@ -1983,6 +2008,7 @@ function OrionLib:MakeWindow(WindowConfig)
 	MakeFloatingDraggable(ReopenBtn.Hitbox, ReopenBtn)
 
 	local function HideWindow()
+		MainWindow.Position = GetAbsoluteWindowPosition(MainWindow)
 		MainWindow.Visible = false
 		UIHidden = true
 		ReopenBtn.Position = GetClampedGuiPosition(ReopenBtn, UDim2.new(
@@ -1997,6 +2023,7 @@ function OrionLib:MakeWindow(WindowConfig)
 	end
 
 	local function ShowWindow()
+		MainWindow.Position = GetAbsoluteWindowPosition(MainWindow)
 		MainWindow.Position = ClampWindowPosition(MainWindow.Position, MainWindow.AbsoluteSize)
 		MainWindow.Visible = true
 		UIHidden = false
@@ -2050,6 +2077,7 @@ function OrionLib:MakeWindow(WindowConfig)
 			return
 		end
 		minimizeBusy = true
+		MainWindow.Position = GetAbsoluteWindowPosition(MainWindow)
 		if reztween then reztween:Cancel(); reztween = nil end
 		if mintween then mintween:Cancel(); mintween = nil end
 		minimized = not minimized
@@ -2120,6 +2148,7 @@ function OrionLib:MakeWindow(WindowConfig)
 		task.wait(2)
 		vgs.TS:Create(LoadSequenceText, TweenInfo.new(.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency=1}):Play()
 		MainWindow.Visible = true
+		MainWindow.Position = GetAbsoluteWindowPosition(MainWindow)
 		scconn:Disconnect()
 		LoadSequenceLogo:Destroy(); LoadSequenceText:Destroy()
 	end
